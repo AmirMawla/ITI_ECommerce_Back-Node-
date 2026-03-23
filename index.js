@@ -1,4 +1,4 @@
-const env = require('dotenv').config();
+require('dotenv').config();
 const errorHandler = require('./middlewares/errorhandler');
 const cors = require('cors');
 const express = require('express');
@@ -11,6 +11,8 @@ require('dotenv').config();
 const { connectRabbitMQ, closeConnection } = require('./Config/rabbitmq');
 const { limiter } = require('./middlewares/rateLimiter');
 
+// app routes imports :__:
+const authRoute = require("./routes/auth.routes")
 
 
 
@@ -29,7 +31,7 @@ app.use(limiter);
 
 
 // routers
-// app.use('/users', userRoutes);
+app.use('/auth', authRoute);
 
 
 
