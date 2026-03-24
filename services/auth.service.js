@@ -4,8 +4,8 @@ const jwt = require('jsonwebtoken');
 const APIError = require('../Errors/APIError');
 const axios = require("axios")
 
-const generateToken = (userId) => {
-    return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '1d' });
+const generateToken = (userId, role) => {
+    return jwt.sign({ id: userId, role }, process.env.JWT_SECRET, { expiresIn: '1d' });
 };
 
 exports.registerUser = async (userData) => {
@@ -25,7 +25,7 @@ exports.registerUser = async (userData) => {
     const userObj = user.toObject();
     delete userObj.password;
 
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.role);
     return { user: userObj, token };
 };
 
@@ -39,7 +39,7 @@ exports.loginUser = async (email, password) => {
     const userObj = user.toObject();
     delete userObj.password;
 
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.role);
     return { user: userObj, token };
 };
 
@@ -76,6 +76,6 @@ exports.googleOAuth = async (code) => {
     }
 
     // 4. Generate your app's JWT
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.role);
     return { user, token };
 };

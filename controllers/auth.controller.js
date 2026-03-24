@@ -50,7 +50,7 @@ const googleCallback = async (req, res, next) => {
             success: true,
             message: "Google Login Successful",
             user,
-            token // <--- You will copy this from the browser to use in Postman
+            token
         });
     } catch (error) {
         console.log("error oauth is ", error)

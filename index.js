@@ -13,6 +13,8 @@ const { limiter } = require('./middlewares/rateLimiter');
 
 // app routes imports :__:
 const authRoute = require("./routes/auth.routes")
+const usersRoute = require("./routes/user.routes")
+const adminRoute = require("./routes/admin.routes")
 
 
 
@@ -32,6 +34,8 @@ app.use(limiter);
 
 // routers
 app.use('/auth', authRoute);
+app.use('/users', usersRoute);
+app.use('/admin', adminRoute);
 
 
 
