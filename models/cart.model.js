@@ -1,9 +1,5 @@
 const mongoose = require("mongoose");
 
-// ─── CartItem (replaces the SQL CartProduct join table) ──────────────────────
-// In MongoDB we embed cart items directly inside the cart document.
-// No need for a separate CartProduct collection — this is a key SQL→Mongo change.
-
 const cartItemSchema = new mongoose.Schema(
   {
     productId: {
@@ -35,21 +31,19 @@ const cartItemSchema = new mongoose.Schema(
 
 const cartSchema = new mongoose.Schema(
   {
-    // SQL: Cart.Id (FK → User) — in Mongo, one cart per user, userId IS the key
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: [true, "User is required"],
-      unique: true, // one cart per user
+      unique: true, 
     },
 
-    // Guest cart support (project spec)
     sessionId: {
       type: String,
-      sparse: true, // null for logged-in users
+      sparse: true, 
     },
 
-    // Embedded items (replaces SQL CartProduct join table)
+
     items: {
       type: [cartItemSchema],
       default: [],
@@ -64,7 +58,7 @@ const cartSchema = new mongoose.Schema(
     discountAmount: { type: Number, default: 0, min: 0 },
   },
   {
-    timestamps: true, // replaces SQL `timestamp`
+    timestamps: true, 
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }

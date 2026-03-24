@@ -10,6 +10,7 @@ const hpp = require('hpp');
 require('dotenv').config();
 const { connectRabbitMQ, closeConnection } = require('./Config/rabbitmq');
 const { limiter } = require('./middlewares/rateLimiter');
+const orderRoutes = require("./routes/order.routes");
 
 
 
@@ -30,6 +31,7 @@ app.use(limiter);
 
 // routers
 // app.use('/users', userRoutes);
+app.use("/orders", orderRoutes);
 
 
 

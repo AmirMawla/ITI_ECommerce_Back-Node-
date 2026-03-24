@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 
-// Each image stored in ImageKit
 const productImageSchema = new mongoose.Schema(
   {
     fileId: { type: String, required: true },
@@ -32,7 +31,6 @@ const productSchema = new mongoose.Schema(
       min: [0, "Price cannot be negative"],
     },
 
-    // SQL schema had ImageUrl — Mongo stores multiple images as array
     images: {
       type: [productImageSchema],
       validate: {
@@ -41,14 +39,11 @@ const productSchema = new mongoose.Schema(
       },
     },
 
-    // Convenience getter for the primary image URL (mirrors SQL ImageUrl)
-    // Set automatically on save
     imageUrl: {
       type: String,
       trim: true,
     },
 
-    // Stock availability (from project spec)
     stock: {
       type: Number,
       required: [true, "Stock quantity is required"],
@@ -56,20 +51,17 @@ const productSchema = new mongoose.Schema(
       default: 0,
     },
 
-    // FK → Category (SQL: CategoryId)
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       required: [true, "Category is required"],
     },
 
-    // FK → User/Seller (who listed this product)
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
 
-    // Slug for SEO-friendly URLs & search
     slug: {
       type: String,
       unique: true,
@@ -77,19 +69,16 @@ const productSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Computed from reviews — cached for fast sorting/filtering
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     reviewCount: { type: Number, default: 0, min: 0 },
 
-    // Soft delete
     isActive: { type: Boolean, default: true },
     deletedAt: { type: Date, default: null },
 
-    // Tags for search/filter
     tags: [{ type: String, trim: true, lowercase: true }],
   },
   {
-    timestamps: true, // replaces SQL `timestamp`
+    timestamps: true, 
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
