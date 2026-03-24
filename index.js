@@ -35,7 +35,7 @@ app.use(limiter);
 // app.use('/users', userRoutes);
 app.use("/orders", orderRoutes);
 app.use('/auth', authRoute);
-
+app.use("/orders", orderRoutes);
 
 
 app.use(errorHandler);
