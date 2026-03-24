@@ -22,7 +22,45 @@ const login = async (req, res) => {
     }
 };
 
+const googleAuth = async (req, res) => {
+    const rootUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
+    const options = {
+        redirect_uri: process.env.GOOGLE_OAUTH_CALLBACK_URL,
+        client_id: process.env.GOOGLE_OAUTH_CLIENT_ID,
+        access_type: 'offline',
+        response_type: 'code',
+        prompt: 'consent',
+        scope: [
+            'https://www.googleapis.com/auth/userinfo.profile',
+            'https://www.googleapis.com/auth/userinfo.email',
+        ].join(' '),
+    };
+
+    const qs = new URLSearchParams(options);
+    res.redirect(`${rootUrl}?${qs.toString()}`);
+};
+
+
+const googleCallback = async (req, res, next) => {
+    const code = req.query.code;
+    try {
+        const { user, token } = await authService.googleOAuth(code);
+        console.log("user data form google is : ", user)
+        res.status(200).json({
+            success: true,
+            message: "Google Login Successful",
+            user,
+            token // <--- You will copy this from the browser to use in Postman
+        });
+    } catch (error) {
+        console.log("error oauth is ", error)
+        next(error);
+    }
+};
+
 module.exports = {
     signup,
-    login
+    login,
+    googleAuth,
+    googleCallback,
 }

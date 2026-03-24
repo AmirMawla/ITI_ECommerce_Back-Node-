@@ -2,6 +2,7 @@ const User = require('../models/user.model');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const APIError = require('../Errors/APIError');
+const axios = require("axios")
 
 const generateToken = (userId) => {
     return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: '1d' });
@@ -40,4 +41,41 @@ exports.loginUser = async (email, password) => {
 
     const token = generateToken(user._id);
     return { user: userObj, token };
+};
+
+exports.googleOAuth = async (code) => {
+    // 1. Exchange code for tokens
+    const { data } = await axios.post('https://oauth2.googleapis.com/token', {
+        code,
+        client_id: process.env.GOOGLE_OAUTH_CLIENT_ID,
+        client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRIT,
+        redirect_uri: process.env.GOOGLE_OAUTH_CALLBACK_URL,
+        grant_type: 'authorization_code',
+    });
+
+    // 2. Get user info using the access_token
+    const { data: profile } = await axios.get(
+        `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${data.access_token}`,
+        { headers: { Authorization: `Bearer ${data.id_token}` } }
+    );
+
+    // 3. Find or Create user in your DB
+    let user = await User.findOne({ email: profile.email });
+    console.log("user row data from google: ", profile)
+    if (!user) {
+        user = await User.create({
+            name: profile.name,
+            email: profile.email,
+            password: require('crypto').randomBytes(20).toString('hex'),
+            authProvider: 'google',
+            googleId: profile.id,
+            profilePicture: {
+                url: profile.picture,
+            }
+        });
+    }
+
+    // 4. Generate your app's JWT
+    const token = generateToken(user._id);
+    return { user, token };
 };
