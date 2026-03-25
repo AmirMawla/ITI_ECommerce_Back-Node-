@@ -94,6 +94,79 @@ const getVendorOrder = async (req, res, next) => {
   }
 };
 
+const addOrder = async (req, res, next) => {
+  try {
+    const currentUser = getCurrentUser(req);
+    const data = await orderService.createOrder(currentUser.userId, req.body);
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const addCashOrder = async (req, res, next) => {
+  try {
+    const currentUser = getCurrentUser(req);
+    const data = await orderService.createCashOrder(currentUser.userId);
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const checkout = async (req, res, next) => {
+  try {
+    const currentUser = getCurrentUser(req);
+    const userId = req.body.userId || currentUser.userId;
+    const data = await orderService.checkout(userId);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const cancelOrder = async (req, res, next) => {
+  try {
+    const currentUser = getCurrentUser(req);
+    const isAdmin = currentUser.role === "admin";
+    await orderService.cancelOrder(req.params.orderId, currentUser.userId, isAdmin);
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateOrderStatus = async (req, res, next) => {
+  try {
+    const currentUser = getCurrentUser(req);
+    const data = await orderService.updateShipmentStatus(req.params.id, currentUser.userId, req.body);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const webhook = async (req, res, next) => {
+  try {
+    const signature = req.header("x-kashier-signature");
+    await orderService.handleWebhook(req.body, signature);
+    res.status(200).json({ success: true, message: "Webhook received successfully" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getTopFiveRecentVendorOrders = async (req, res, next) => {
+  try {
+    const currentUser = getCurrentUser(req);
+    const count = Number(req.query.count || 5);
+    const data = await orderService.getTopFiveRecentOrders(currentUser.userId, count);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getOrder,
   getOrderDetailsDividedForVendors,
@@ -102,4 +175,11 @@ module.exports = {
   getAllOrders,
   getVendorOrders,
   getVendorOrder,
+  addOrder,
+  addCashOrder,
+  checkout,
+  cancelOrder,
+  updateOrderStatus,
+  webhook,
+  getTopFiveRecentVendorOrders,
 };

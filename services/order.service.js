@@ -4,7 +4,19 @@ const User = require("../models/user.model");
 const Payment = require("../models/payment.model");
 const Shipping = require("../models/shipping.model");
 const Review = require("../models/review.model");
+const Cart = require("../models/cart.model");
 const OrderErrors = require("../Errors/OrderErrors");
+const kashierService = require("./kashier.service");
+const { sendOrderStatusChangedEmail } = require("./email.service");
+
+const safeEnqueueOrderEmail = async (emailPayload) => {
+  try {
+    await sendOrderStatusChangedEmail(emailPayload);
+  } catch (err) {
+    // Do not block the API response if email queue fails
+    console.error("Failed to enqueue order status email:", err?.message || err);
+  }
+};
 
 const normalizeStatuses = (statuses) => {
   if (!statuses) return null;
@@ -56,6 +68,55 @@ const toVendorSummary = (items) => {
     });
   }
   return Array.from(grouped.values());
+};
+
+const updateOrderStatusByShippings = (order, shippings) => {
+  const shippingStatuses = (shippings || []).map((s) => s.status);
+  if (!shippingStatuses.length) {
+    order.status = "pending";
+    return;
+  }
+
+  if (shippingStatuses.every((s) => s === "delivered")) {
+    order.status = "delivered";
+    return;
+  }
+
+  const shippedSet = new Set(["outfordelivery"]);
+  if (shippingStatuses.every((s) => shippedSet.has(s))) {
+    order.status = "shipped";
+    return;
+  }
+
+  if (shippingStatuses.every((s) => s === "preparing")) {
+    order.status = "proccessing";
+    return;
+  }
+
+  if (shippingStatuses.every((s) => s === "canceled")) {
+    order.status = "canceled";
+    return;
+  }
+
+  order.status = "pending";
+};
+
+const buildOrderItemsFromCart = (cart) => {
+  const items = (cart.items || []).map((item) => {
+    const product = item.productId;
+    if (!product) return null;
+    return {
+      productId: product._id,
+      productName: product.name,
+      productImage: product.imageUrl || product.images?.[0]?.url || null,
+      priceAtOrder: Number(item.priceAtAddTime ?? product.price),
+      quantity: Number(item.quantity),
+      vendorId: product.vendorId || null,
+    };
+  }).filter(Boolean);
+
+  if (!items.length) throw OrderErrors.CartNotFoundOrEmpty;
+  return items;
 };
 
 const applyCommonFilters = async (baseFilter, request = {}) => {
@@ -219,25 +280,47 @@ const getUserOrders = async (requestedUserId, currentUser) => {
 
   const query = Order.find({ userId }).sort(sort).lean();
   const allOrders = await query;
+
+  const ordersIds = allOrders.map((o) => o._id);
+  const allVendorIds = [
+    ...new Set(allOrders.flatMap((o) => (o.items || []).map((i) => String(i.vendorId))).filter((v) => v && v !== "null")),
+  ];
+
+  const shippings = allOrders.length
+    ? await Shipping.find({ orderId: { $in: ordersIds }, vendorId: { $in: allVendorIds } }).lean()
+    : [];
+  const shippingMap = new Map(
+    shippings.map((s) => [`${String(s.orderId)}_${String(s.vendorId)}`, s.status])
+  );
+
   const flattened = allOrders.flatMap((order) => {
     const groups = toVendorSummary(order.items || []);
-    return groups.map((g) => ({
-      orderId: order._id,
-      vendorId: g.vendorId,
-      vendorName: "Unknown Vendor",
-      status: order.status,
-      orderDate: order.orderDate,
-      totalQuantity: g.quantity,
-      totalAmount: g.total,
-    }));
+    return groups.map((g) => {
+      const vendorShippingStatus = shippingMap.get(`${String(order._id)}_${String(g.vendorId)}`) || "preparing";
+      return {
+        orderId: order._id,
+        vendorId: g.vendorId,
+        vendorName: "Unknown Vendor",
+        status: vendorShippingStatus, 
+        orderDate: order.orderDate,
+        totalQuantity: g.quantity,
+        totalAmount: g.total,
+        items: g.items.map((it) => ({ ...it, status: vendorShippingStatus })), 
+      };
+    });
   });
 
-  const vendorIds = [...new Set(flattened.map((x) => String(x.vendorId)).filter((v) => v && v !== "null"))];
-  const vendors = await User.find({ _id: { $in: vendorIds } }).select("_id name sellerProfile.storeName profilePicture").lean();
+  const vendors = await User.find({ _id: { $in: allVendorIds } })
+    .select("_id name sellerProfile.storeName profilePicture")
+    .lean();
   const vendorMap = new Map(vendors.map((v) => [String(v._id), v]));
+
   const enriched = flattened.map((x) => ({
     ...x,
-    vendorName: vendorMap.get(String(x.vendorId))?.sellerProfile?.storeName || vendorMap.get(String(x.vendorId))?.name || "Unknown Vendor",
+    vendorName:
+      vendorMap.get(String(x.vendorId))?.sellerProfile?.storeName ||
+      vendorMap.get(String(x.vendorId))?.name ||
+      "Unknown Vendor",
     vendorProfilePicture: vendorMap.get(String(x.vendorId))?.profilePicture?.url || null,
   }));
 
@@ -285,19 +368,28 @@ const getVendorOrders = async (requestedVendorId, currentUser, request) => {
   await applyCommonFilters(filter, request);
 
   const orders = await Order.find(filter).sort(sort).lean();
+
+  const orderIds = orders.map((o) => o._id);
+  const shippings = orderIds.length
+    ? await Shipping.find({ orderId: { $in: orderIds }, vendorId }).lean()
+    : [];
+  const shippingMap = new Map(shippings.map((s) => [String(s.orderId), s.status]));
+
   const data = orders.map((o) => {
     const vendorItems = (o.items || []).filter((i) => String(i.vendorId) === String(vendorId));
+    const vendorShippingStatus = shippingMap.get(String(o._id)) || o.status;
     return {
       id: o._id,
       totalAmount: vendorItems.reduce((a, b) => a + Number(b.priceAtOrder) * Number(b.quantity), 0),
       orderDate: o.orderDate,
-      status: o.status,
+      status: vendorShippingStatus, 
       items: vendorItems.map((i) => ({
         productId: i.productId,
         productName: i.productName,
         productImage: i.productImage,
         price: i.priceAtOrder,
         quantity: i.quantity,
+        status: vendorShippingStatus,
       })),
     };
   });
@@ -312,19 +404,368 @@ const getVendorOrder = async (orderId, vendorId) => {
   const vendorItems = (order.items || []).filter((i) => String(i.vendorId) === String(vendorId));
   if (!vendorItems.length) throw OrderErrors.VendorOrderNotFound;
 
+  const shipping = await Shipping.findOne({ orderId, vendorId }).lean();
+  const vendorShippingStatus = shipping?.status || order.status;
+
   return {
     id: order._id,
     totalAmount: vendorItems.reduce((a, b) => a + Number(b.priceAtOrder) * Number(b.quantity), 0),
     orderDate: order.orderDate,
-    status: order.status,
+    status: vendorShippingStatus,
     items: vendorItems.map((i) => ({
       productId: i.productId,
       productName: i.productName,
       productImage: i.productImage,
       price: i.priceAtOrder,
       quantity: i.quantity,
+      status: vendorShippingStatus,
     })),
   };
+};
+
+const createOrder = async (userId, payload = {}) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const [cart, user] = await Promise.all([
+      Cart.findOne({ userId }).populate("items.productId").session(session),
+      User.findById(userId).select("email").session(session),
+    ]);
+    if (!cart || !cart.items?.length) throw OrderErrors.CartNotFoundOrEmpty;
+
+    const orderItems = buildOrderItemsFromCart(cart);
+    const totalAmount = orderItems.reduce((sum, i) => sum + i.priceAtOrder * i.quantity, 0);
+
+    const order = await Order.create(
+      [
+        {
+          userId,
+          totalAmount,
+          orderDate: new Date(),
+          status: "pending",
+          items: orderItems,
+          paymentMethod: "credit_card",
+          guestEmail: user?.email || undefined,
+        },
+      ],
+      { session }
+    );
+
+    const createdOrder = order[0];
+    const payment = await Payment.create(
+      [
+        {
+          orderId: createdOrder._id,
+          totalAmount,
+          paymentMethod: "credit_card",
+          paymentStatus: "pending",
+          paidBy: { userId, email: user?.email },
+        },
+      ],
+      { session }
+    );
+    createdOrder.paymentId = payment[0]._id;
+
+    const vendorIds = [...new Set(orderItems.map((i) => String(i.vendorId)).filter(Boolean))];
+    const shippingDocs = vendorIds.map((vendorId) => ({
+      orderId: createdOrder._id,
+      vendorId,
+      status: "preparing",
+      estimatedDeliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    }));
+    if (shippingDocs.length) await Shipping.insertMany(shippingDocs, { session });
+
+    const providerSession = await kashierService.createPaymentSession({
+      amount: totalAmount,
+      orderId: `ORDER-${createdOrder._id}`,
+      notes: payload.notes || "Order payment",
+    });
+    if (!providerSession?._id) throw OrderErrors.PaymentSessionCreationFailed;
+
+    payment[0].gatewayPaymentId = providerSession._id;
+    await payment[0].save({ session });
+
+    cart.items = [];
+    await cart.save({ session });
+    await createdOrder.save({ session });
+    await session.commitTransaction();
+    session.endSession();
+
+    return {
+      order: await getOrderById(createdOrder._id),
+      paymentSession: {
+        sessionId: providerSession._id,
+        orderId: providerSession?.paymentParams?.order || `ORDER-${createdOrder._id}`,
+        amount: providerSession?.paymentParams?.amount || totalAmount,
+        sessionUrl: providerSession?.sessionUrl,
+      },
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    if (error?.statusCode) throw error;
+    throw OrderErrors.OrderCreationFailed;
+  }
+};
+
+const createCashOrder = async (userId) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const [cart, user] = await Promise.all([
+      Cart.findOne({ userId }).populate("items.productId").session(session),
+      User.findById(userId).select("email").session(session),
+    ]);
+    if (!cart || !cart.items?.length) throw OrderErrors.CartNotFoundOrEmpty;
+
+    const orderItems = buildOrderItemsFromCart(cart);
+    const totalAmount = orderItems.reduce((sum, i) => sum + i.priceAtOrder * i.quantity, 0);
+
+    const order = await Order.create(
+      [
+        {
+          userId,
+          totalAmount,
+          orderDate: new Date(),
+          status: "pending",
+          items: orderItems,
+          paymentMethod: "cash_on_delivery",
+          guestEmail: user?.email || undefined,
+        },
+      ],
+      { session }
+    );
+    const createdOrder = order[0];
+
+    const payment = await Payment.create(
+      [
+        {
+          orderId: createdOrder._id,
+          totalAmount,
+          paymentMethod: "cash_on_delivery",
+          paymentStatus: "pending",
+          paidBy: { userId, email: user?.email },
+        },
+      ],
+      { session }
+    );
+
+    createdOrder.paymentId = payment[0]._id;
+    const vendorIds = [...new Set(orderItems.map((i) => String(i.vendorId)).filter(Boolean))];
+    const shippingDocs = vendorIds.map((vendorId) => ({
+      orderId: createdOrder._id,
+      vendorId,
+      status: "preparing",
+      estimatedDeliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    }));
+    if (shippingDocs.length) await Shipping.insertMany(shippingDocs, { session });
+
+    cart.items = [];
+    await cart.save({ session });
+    await createdOrder.save({ session });
+    await session.commitTransaction();
+    session.endSession();
+
+    return getOrderById(createdOrder._id);
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    if (error?.statusCode) throw error;
+    throw OrderErrors.OrderCreationFailed;
+  }
+};
+
+const checkout = async (userId) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const [cart, user] = await Promise.all([
+      Cart.findOne({ userId }).populate("items.productId").session(session),
+      User.findById(userId).select("email").session(session),
+    ]);
+    if (!cart || !cart.items?.length) throw OrderErrors.CartNotFoundOrEmpty;
+
+    const orderItems = buildOrderItemsFromCart(cart);
+    const totalAmount = orderItems.reduce((sum, i) => sum + i.priceAtOrder * i.quantity, 0);
+
+    const order = await Order.create(
+      [
+        {
+          userId,
+          totalAmount,
+          orderDate: new Date(),
+          status: "pending",
+          items: orderItems,
+          paymentMethod: "credit_card",
+          guestEmail: user?.email || undefined,
+        },
+      ],
+      { session }
+    );
+
+    const createdOrder = order[0];
+    const payment = await Payment.create(
+      [
+        {
+          orderId: createdOrder._id,
+          totalAmount,
+          paymentMethod: "credit_card",
+          paymentStatus: "completed",
+          paidBy: { userId, email: user?.email },
+        },
+      ],
+      { session }
+    );
+    createdOrder.paymentId = payment[0]._id;
+
+    cart.items = [];
+    await cart.save({ session });
+    await createdOrder.save({ session });
+    await session.commitTransaction();
+    session.endSession();
+
+    return getOrderById(createdOrder._id);
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    if (error?.statusCode) throw error;
+    throw OrderErrors.OrderCreationFailed;
+  }
+};
+
+const cancelOrder = async (orderId, currentUserId, isAdmin) => {
+  const order = await Order.findById(orderId);
+  if (!order) throw OrderErrors.OrderNotFound;
+
+  if (!isAdmin && String(order.userId) !== String(currentUserId)) throw OrderErrors.AccessDenied;
+  if (order.status === "delivered") throw OrderErrors.OrderAlreadyDelivered;
+  if (order.status === "canceled") throw OrderErrors.OrderAlreadyCancelled;
+
+  order.status = "canceled";
+  await order.save();
+
+  await Shipping.updateMany({ orderId: order._id }, { $set: { status: "canceled" } });
+
+  const payment = await Payment.findById(order.paymentId);
+  if (payment) {
+    payment.paymentStatus = payment.paymentStatus === "completed" ? "refunded" : "cancelled";
+    await payment.save();
+  }
+
+  // Notify customer
+  const customer = await User.findById(order.userId).select("email name").lean();
+  if (customer?.email) {
+    await safeEnqueueOrderEmail({
+      to: customer.email,
+      subject: `Order #${order._id} update`,
+      data: {
+        userName: customer.name || "Customer",
+        orderId: String(order._id),
+        vendorName: "All vendors",
+        shippingStatus: "canceled",
+        orderStatus: order.status,
+        changedAt: new Date().toLocaleString(),
+      },
+    });
+  }
+};
+
+const updateShipmentStatus = async (orderId, vendorId, request) => {
+  const allowedStatuses = ["preparing", "outfordelivery", "delivered", "canceled", "returned"];
+  if (!allowedStatuses.includes(request.newStatus)) throw OrderErrors.InvalidShippingStatus;
+
+  const shipping = await Shipping.findOne({ orderId, vendorId });
+  if (!shipping) throw OrderErrors.ShippingNotFound;
+
+  const previousShippingStatus = shipping.status;
+  shipping.status = request.newStatus;
+  if (request.newStatus === "delivered") shipping.actualDeliveryDate = new Date();
+  shipping.statusHistory.push({
+    status: request.newStatus,
+    note: request.note || "",
+    location: request.location || "",
+    updatedAt: new Date(),
+  });
+  await shipping.save();
+
+  const [order, shippings] = await Promise.all([
+    Order.findById(orderId),
+    Shipping.find({ orderId }),
+  ]);
+  if (!order) throw OrderErrors.OrderNotFound;
+  updateOrderStatusByShippings(order, shippings);
+  await order.save();
+
+  // Notify customer only if status actually changed
+  if (previousShippingStatus !== request.newStatus) {
+    const [customer, vendor] = await Promise.all([
+      User.findById(order.userId).select("email name").lean(),
+      User.findById(vendorId).select("sellerProfile.storeName name").lean(),
+    ]);
+
+    if (customer?.email) {
+      await safeEnqueueOrderEmail({
+        to: customer.email,
+        subject: `Order #${orderId} update`,
+        data: {
+          userName: customer.name || "Customer",
+          orderId: String(orderId),
+          vendorName: vendor?.sellerProfile?.storeName || vendor?.name,
+          shippingStatus: request.newStatus,
+          orderStatus: order.status,
+          estimatedDeliveryDate: shipping?.estimatedDeliveryDate
+            ? shipping.estimatedDeliveryDate.toLocaleDateString()
+            : undefined,
+          changedAt: new Date().toLocaleString(),
+        },
+      });
+    }
+  }
+
+  return getOrderById(orderId);
+};
+
+const handleWebhook = async (payload, signatureHeader) => {
+  const { data } = payload || {};
+  const isValid = kashierService.isValidWebhookSignature(data, signatureHeader);
+  if (!isValid) throw OrderErrors.InvalidWebhookSignature;
+
+  const merchantOrderId = data?.merchantOrderId || "";
+  const idPart = merchantOrderId.startsWith("ORDER-") ? merchantOrderId.replace("ORDER-", "") : null;
+
+  const payment = idPart
+    ? await Payment.findOne({ orderId: idPart })
+    : await Payment.findOne({ gatewayPaymentId: data?._id || data?.sessionId });
+  if (!payment) throw OrderErrors.PaymentNotFound;
+
+  payment.paymentStatus = data?.status === "SUCCESS" ? "completed" : "failed";
+  payment.transactionId = data?.paymentId || data?.referenceId || payment.transactionId;
+  await payment.save();
+
+  return { success: true };
+};
+
+const getTopFiveRecentOrders = async (vendorId, count = 5) => {
+  const orders = await Order.find({ "items.vendorId": vendorId })
+    .sort({ orderDate: -1 })
+    .limit(Number(count))
+    .populate("userId", "name")
+    .lean();
+
+  return orders.map((o) => ({
+    id: o._id,
+    orderDate: o.orderDate,
+    totalAmount: o.totalAmount,
+    status: o.status,
+    customerName: o.userId?.name || "Unknown",
+    items: (o.items || [])
+      .filter((item) => String(item.vendorId) === String(vendorId))
+      .map((item) => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.priceAtOrder,
+      })),
+  }));
 };
 
 module.exports = {
@@ -335,4 +776,11 @@ module.exports = {
   getAllOrders,
   getVendorOrders,
   getVendorOrder,
+  createOrder,
+  createCashOrder,
+  checkout,
+  cancelOrder,
+  updateShipmentStatus,
+  handleWebhook,
+  getTopFiveRecentOrders,
 };

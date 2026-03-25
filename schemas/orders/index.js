@@ -6,4 +6,9 @@ module.exports = {
   getUserOrdersSchema: require("./getUserOrdersSchema"),
   getAllOrdersSchema: require("./getAllOrdersSchema"),
   getVendorOrdersSchema: require("./getVendorOrdersSchema"),
+  addOrderSchema: require("./addOrderSchema"),
+  checkoutSchema: require("./checkoutSchema"),
+  cancelOrderSchema: require("./cancelOrderSchema"),
+  updateShipmentStatusSchema: require("./updateShipmentStatusSchema"),
+  topRecentVendorOrdersSchema: require("./topRecentVendorOrdersSchema"),
 };

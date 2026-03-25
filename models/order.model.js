@@ -59,11 +59,10 @@ const orderSchema = new mongoose.Schema(
       enum: {
         values: [
           "pending",
-          "confirmed",
-          "processing",
+          "proccessing",
           "shipped",
           "delivered",
-          "cancelled",
+          "canceled",
           "refunded",
         ],
         message: "Invalid order status",
@@ -145,11 +144,11 @@ orderSchema.virtual("itemCount").get(function () {
 
 // ─── Instance method: cancel order ───────────────────────────────────────────
 orderSchema.methods.cancel = function (note = "") {
-  if (["delivered", "cancelled", "refunded"].includes(this.status)) {
+  if (["delivered", "canceled", "refunded"].includes(this.status)) {
     throw new Error(`Cannot cancel an order with status: ${this.status}`);
   }
-  this.status = "cancelled";
-  this.statusHistory.push({ status: "cancelled", changedAt: new Date(), note });
+  this.status = "canceled";
+  this.statusHistory.push({ status: "canceled", changedAt: new Date(), note });
   return this.save();
 };
 

@@ -6,7 +6,6 @@ const shippingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
       required: [true, "Order is required"],
-      unique: true, 
     },
 
     vendorId: {
@@ -30,18 +29,15 @@ const shippingSchema = new mongoose.Schema(
       required: [true, "Shipping status is required"],
       enum: {
         values: [
-          "not_shipped",
           "preparing",
-          "shipped",
-          "in_transit",
-          "out_for_delivery",
+          "outfordelivery",
           "delivered",
-          "failed_delivery",
           "returned",
+          "canceled",
         ],
         message: "Invalid shipping status",
       },
-      default: "not_shipped",
+      default: "preparing",
     },
 
     carrier: {
@@ -85,7 +81,7 @@ const shippingSchema = new mongoose.Schema(
 );
 
 // ─── Indexes ────────────────────────────────────────────────────────────────
-shippingSchema.index({ orderId: 1 });
+shippingSchema.index({ orderId: 1, vendorId: 1 }, { unique: true });
 shippingSchema.index({ vendorId: 1 });
 shippingSchema.index({ trackingNumber: 1 }, { sparse: true });
 shippingSchema.index({ status: 1 });

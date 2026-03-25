@@ -6,7 +6,8 @@ const EMAIL_QUEUE = process.env.EMAIL_QUEUE_NAME || 'email_queue';
 const EMAIL_TYPES = {
     WELCOME: 'welcome',
     PASSWORD_RESET: 'passwordReset',
-    PASSWORD_RESET_CONFIRMATION: 'passwordResetConfirmation'
+    PASSWORD_RESET_CONFIRMATION: 'passwordResetConfirmation',
+    ORDER_STATUS_CHANGED: 'orderStatusChanged',
 };
 
 //Send welcome email after user registration
@@ -68,5 +69,15 @@ module.exports = {
     EMAIL_TYPES,
     sendWelcomeEmail,
     sendPasswordResetOTP,
-    sendPasswordResetConfirmation
+    sendPasswordResetConfirmation,
+    sendOrderStatusChangedEmail: async ({ to, subject, data }) => {
+        const emailData = {
+            type: EMAIL_TYPES.ORDER_STATUS_CHANGED,
+            to,
+            subject: subject || 'Order status updated',
+            data: data || {},
+        };
+        await publishToQueue(EMAIL_QUEUE, emailData);
+        console.log(`📧 Order status email queued for ${to}`);
+    }
 };
