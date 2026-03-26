@@ -1,0 +1,30 @@
+# DB & JWT CONFIGURATION
+PORT=3000
+MONGODB_URI=mongodb+srv://amirmawla27_db_user:urqhKBAW79SfvAj1@cluster0.pznjl7k.mongodb.net/
+DB_NAME=ITI-Ecommerce-db
+JWT_SECRET=10b80710507cc6f11ad49c7572c249c7f408896524c36d3a09c79f59a9731e61
+
+# payment gateway Configuration
+KASHIER_URL=https://test-api.kashier.io
+KASHIER_API_KEY=98370231-82c4-43f0-a7a2-90df5055b41b
+KASHIER_SECRET_KEY=42db814f7fe9377fa99dc9b1799cf68a$4819c8a26d2d2147ea34145d671e55d62b12a7aff16d97457f81471a2f554ec6c30c0f2ec129b5f1701c1004a48f9a1b
+KASHIER_MERCHANT_ID=MID-42865-950
+WEBHOOK_URL= put your webhook url here  that will be used to receive webhook from kashier  using ngrok or any other service
+
+# Email Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=put your email here
+SMTP_PASS=put your email password here  i removed my password for scurety hahahahaha
+EMAIL_FROM= SHOPIQ <put your email here>
+FRONTEND_URL=http://localhost:3000
+
+# RabbitMQ Configuration
+RABBITMQ_URL=amqps://mwkawcrf:Z5gRcNLiAN-8kNFqpD6UXGNElcKOWbPj@chameleon.lmq.cloudamqp.com/mwkawcrf
+EMAIL_QUEUE_NAME=email_queue
+
+
+# ImageKit Configurations
+IMAGEKIT_PUBLIC_KEY=public_3XSSTb63uDNTcgnn6o8AOvxcl2c=
+IMAGEKIT_PRIVATE_KEY=private_Yke9qQ+kOpjvBnzGpFWWXD44k7s=
+IMAGEKIT_URL_ENDPOINT=https://ik.imagekit.io/nwspx4pmc
