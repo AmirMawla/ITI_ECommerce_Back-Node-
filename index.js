@@ -15,7 +15,7 @@ const { limiter } = require('./middlewares/rateLimiter');
 const authRoute = require("./routes/auth.routes")
 const usersRoute = require("./routes/user.routes")
 const adminRoute = require("./routes/admin.routes")
-
+const cartRoute = require("./routes/cart.routes")
 
 
 const app = express();
@@ -36,7 +36,7 @@ app.use(limiter);
 app.use('/auth', authRoute);
 app.use('/users', usersRoute);
 app.use('/admin', adminRoute);
-
+app.use('/cart', cartRoute);
 
 
 app.use(errorHandler);

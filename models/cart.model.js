@@ -20,7 +20,6 @@ const cartItemSchema = new mongoose.Schema(
       default: 1,
     },
 
-
     priceAtAddTime: {
       type: Number,
       required: true,
@@ -39,8 +38,9 @@ const cartSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "User is required"],
+      required: [false, "User is required"],
       unique: true, // one cart per user
+      sparse: true, // allow multiple nulls for guest carts
     },
 
     // Guest cart support (project spec)
