@@ -14,6 +14,7 @@ const { limiter } = require("./middlewares/rateLimiter");
 // app routes imports :__:
 const authRoute = require("./routes/auth.routes");
 const orderRoutes = require("./routes/order.routes");
+const paymentRoutes = require("./routes/payment.routes");
 
 
 const app = express();
@@ -32,6 +33,7 @@ app.use(limiter);
 
 // routers
 app.use("/orders", orderRoutes);
+app.use("/payments", paymentRoutes);
 app.use("/auth", authRoute);
 
 
