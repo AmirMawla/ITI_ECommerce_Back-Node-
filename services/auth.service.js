@@ -2,7 +2,8 @@ const User = require('../models/user.model');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const APIError = require('../Errors/APIError');
-const axios = require("axios")
+const axios = require("axios");
+const emailService = require('../services/email.service');
 
 const generateToken = (userId, role) => {
     return jwt.sign({ id: userId, role }, process.env.JWT_SECRET, { expiresIn: '1d' });
@@ -21,6 +22,9 @@ exports.registerUser = async (userData) => {
         email,
         password: hashedPassword
     });
+
+    // Trigger Welcome Email
+    await emailService.sendWelcomeEmail(user);
 
     const userObj = user.toObject();
     delete userObj.password;
@@ -73,6 +77,9 @@ exports.googleOAuth = async (code) => {
                 url: profile.picture,
             }
         });
+
+        // Trigger Welcome Email for new Google users
+        await emailService.sendWelcomeEmail(user);
     }
 
     // 4. Generate your app's JWT
