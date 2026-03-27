@@ -406,7 +406,7 @@ async function run() {
         },
       ],
     });
-    for (const s of ['confirmed', 'processing', 'shipped', 'delivered']) {
+    for (const s of ['proccessing', 'shipped', 'delivered']) {
       order1.status = s;
       await order1.save();
     }
@@ -464,7 +464,7 @@ async function run() {
         },
       ],
     });
-    for (const s of ['confirmed', 'shipped']) {
+    for (const s of ['proccessing', 'shipped']) {
       order2.status = s;
       await order2.save();
     }
@@ -483,7 +483,7 @@ async function run() {
     await Shipping.create({
       orderId: order2._id,
       vendorId: sellerOmar._id,
-      status: 'in_transit',
+      status: 'outfordelivery',
       carrier: 'Bosta',
       trackingNumber: 'BOSTA-' + Math.floor(Math.random() * 1e8),
       estimatedDeliveryDate: estDel,
@@ -519,7 +519,7 @@ async function run() {
         },
       ],
     });
-    for (const s of ['confirmed', 'processing']) {
+    for (const s of ['proccessing']) {
       order3.status = s;
       await order3.save();
     }

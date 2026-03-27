@@ -5,23 +5,25 @@ const express = require('express');
 const mongoose = require('mongoose');
 const helmet = require("helmet");
 const { sanitizeMongoInput } = require("express-v5-mongo-sanitize");
-const { xss } = require('express-xss-sanitizer');
-const hpp = require('hpp');
-require('dotenv').config();
-const { connectRabbitMQ, closeConnection } = require('./Config/rabbitmq');
-const { limiter } = require('./middlewares/rateLimiter');
+const { xss } = require("express-xss-sanitizer");
+const hpp = require("hpp");
+const { connectRabbitMQ, closeConnection } = require("./Config/rabbitmq");
+const { limiter } = require("./middlewares/rateLimiter");
 
 // app routes imports :__:
 const authRoute = require("./routes/auth.routes")
 const usersRoute = require("./routes/user.routes")
 const adminRoute = require("./routes/admin.routes")
 const cartRoute = require("./routes/cart.routes")
+// app routes imports :__:
+const orderRoutes = require("./routes/order.routes");
+const paymentRoutes = require("./routes/payment.routes");
 
 
 const app = express();
 
 // app level middleware
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 app.use(express.json());
 app.use(cors());
 app.use(helmet());
@@ -37,7 +39,8 @@ app.use('/auth', authRoute);
 app.use('/users', usersRoute);
 app.use('/admin', adminRoute);
 app.use('/cart', cartRoute);
-
+app.use('/orders', orderRoutes);
+app.use('/payments', paymentRoutes);
 
 app.use(errorHandler);
 const startServer = async () => {

@@ -29,7 +29,6 @@ const categorySchema = new mongoose.Schema(
       maxlength: [500, "Description cannot exceed 500 characters"],
     },
 
-    // Slug for SEO-friendly URLs
     slug: {
       type: String,
       unique: true,
@@ -39,7 +38,6 @@ const categorySchema = new mongoose.Schema(
 
     isActive: { type: Boolean, default: true },
 
-    // Soft delete
     deletedAt: { type: Date, default: null },
   },
   {

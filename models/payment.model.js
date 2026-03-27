@@ -2,26 +2,21 @@ const mongoose = require("mongoose");
 
 const paymentSchema = new mongoose.Schema(
   {
-    // SQL: Payment.OrderId (FK → Order)
     orderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
       required: [true, "Order is required"],
-      unique: true, // one payment per order
+      unique: true, 
     },
 
-    // SQL: Payment.TotalAmount
     totalAmount: {
       type: Number,
       required: [true, "Total amount is required"],
       min: [0, "Amount cannot be negative"],
     },
 
-    // SQL: Payment.Date
-    // → createdAt from timestamps, but kept explicit for clarity
     date: { type: Date, default: Date.now },
 
-    // SQL: Payment.PaymentMethod
     paymentMethod: {
       type: String,
       required: [true, "Payment method is required"],
@@ -31,7 +26,6 @@ const paymentSchema = new mongoose.Schema(
       },
     },
 
-    // SQL: Payment.PaymentStatus
     paymentStatus: {
       type: String,
       required: [true, "Payment status is required"],
@@ -56,15 +50,13 @@ const paymentSchema = new mongoose.Schema(
       select: false,
     },
 
-    // Refund info
     refundedAmount: { type: Number, default: 0, min: 0 },
     refundedAt: { type: Date },
     refundReason: { type: String, trim: true },
 
-    // Card saving (bonus feature): reference to saved payment method
     savedPaymentMethodId: { type: String },
 
-    // Payer info snapshot
+
     paidBy: {
       userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       email: { type: String },

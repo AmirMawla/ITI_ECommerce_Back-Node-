@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const util = require('util');
 const UserErrors = require('../Errors/UserErrors');
+const User = require("../models/user.model");
 
 const jwtverify = util.promisify(jwt.verify);
 

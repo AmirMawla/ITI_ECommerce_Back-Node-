@@ -76,7 +76,6 @@ const userSchema = new mongoose.Schema(
     // Soft delete (Admin panel: approve/restrict)
     isActive: { type: Boolean, default: true },
     isRestricted: { type: Boolean, default: false },
-    // Seller-specific: payout/earnings info (embedded for quick access)
     sellerProfile: {
       storeName: { type: String, trim: true },
       bio: { type: String, trim: true, maxlength: 500 },
@@ -100,7 +99,6 @@ userSchema.methods.isOTPExpired = function () {
   return Date.now() > this.passwordResetExpires;
 };
 
-// ─── Indexes ────────────────────────────────────────────────────────────────
 userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ googleId: 1 }, { sparse: true });

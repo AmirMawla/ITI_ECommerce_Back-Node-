@@ -2,57 +2,49 @@ const mongoose = require("mongoose");
 
 const offerSchema = new mongoose.Schema(
   {
-    // SQL: Offer.DiscountPercentaege (note: keeping the name intent, fixing spelling)
     discountPercentage: {
       type: Number,
       min: [0, "Discount cannot be negative"],
       max: [100, "Discount cannot exceed 100%"],
     },
 
-    // Flat discount amount (alternative to percentage)
     discountAmount: {
       type: Number,
       min: [0, "Discount amount cannot be negative"],
     },
 
-    // SQL: Offer.VendorId (FK → User/Seller) — null means platform-wide offer
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
 
-    // SQL: Offer.ProductId (FK → Product) — null means applies to entire cart/category
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
       default: null,
     },
 
-    // Category-level discount
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       default: null,
     },
 
-    // SQL: Offer.DiscountCode
     discountCode: {
       type: String,
       trim: true,
       uppercase: true,
       unique: true,
-      sparse: true, // null if auto-applied, unique only when set
+      sparse: true, 
     },
 
-    // SQL: Offer.Description
     description: {
       type: String,
       trim: true,
       maxlength: [500, "Description cannot exceed 500 characters"],
     },
 
-    // SQL: Offer.BannerUrl
     bannerUrl: {
       type: String,
       trim: true,
@@ -60,7 +52,6 @@ const offerSchema = new mongoose.Schema(
 
     bannerFileId: { type: String, trim: true },
 
-    // Validity window
     startDate: { type: Date, default: Date.now },
     endDate: {
       type: Date,
@@ -72,11 +63,9 @@ const offerSchema = new mongoose.Schema(
       },
     },
 
-    // Usage limits
-    usageLimit: { type: Number, min: 1 }, // null = unlimited
+    usageLimit: { type: Number, min: 1 }, 
     usedCount: { type: Number, default: 0, min: 0 },
 
-    // Minimum order value to apply
     minimumOrderValue: { type: Number, default: 0, min: 0 },
 
     isActive: { type: Boolean, default: true },
@@ -88,7 +77,6 @@ const offerSchema = new mongoose.Schema(
   }
 );
 
-// ─── Validation: must have either percentage or flat amount ──────────────────
 offerSchema.pre("validate", function () {
   if (
     this.discountPercentage == null &&
