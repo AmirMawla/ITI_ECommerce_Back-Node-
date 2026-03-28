@@ -19,6 +19,8 @@ const cartRoute = require("./routes/cart.routes")
 const orderRoutes = require("./routes/order.routes");
 const paymentRoutes = require("./routes/payment.routes");
 
+const productRoutes = require("./routes/product.routes");
+const categoryRoutes = require("./routes/category.routes");
 
 const app = express();
 
@@ -41,7 +43,8 @@ app.use('/admin', adminRoute);
 app.use('/cart', cartRoute);
 app.use('/orders', orderRoutes);
 app.use('/payments', paymentRoutes);
-
+app.use('/products', productRoutes);
+app.use('/categories', categoryRoutes);
 app.use(errorHandler);
 const startServer = async () => {
   try {
