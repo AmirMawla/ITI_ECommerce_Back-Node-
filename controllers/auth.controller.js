@@ -45,16 +45,12 @@ const googleCallback = async (req, res, next) => {
     const code = req.query.code;
     try {
         const { user, token } = await authService.googleOAuth(code);
-        console.log("user data form google is : ", user)
-        res.status(200).json({
-            success: true,
-            message: "Google Login Successful",
-            user,
-            token
-        });
+        const frontendUrl = `http://localhost:4200/auth/login-success?token=${token}&user=${JSON.stringify(user)}`;
+        res.redirect(frontendUrl);
+
     } catch (error) {
-        console.log("error oauth is ", error)
-        next(error);
+        console.log("error oauth is ", error);
+        res.redirect(`http://localhost:4200/auth/login?error=google_auth_failed`);
     }
 };
 
