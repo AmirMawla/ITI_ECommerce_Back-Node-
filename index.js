@@ -9,7 +9,6 @@ const { xss } = require("express-xss-sanitizer");
 const hpp = require("hpp");
 const { connectRabbitMQ, closeConnection } = require("./Config/rabbitmq");
 const { limiter } = require("./middlewares/rateLimiter");
-
 // app routes imports :__:
 const authRoute = require("./routes/auth.routes")
 const usersRoute = require("./routes/user.routes")
@@ -18,6 +17,7 @@ const cartRoute = require("./routes/cart.routes")
 const orderRoutes = require("./routes/order.routes");
 const paymentRoutes = require("./routes/payment.routes");
 const bannerRoute = require("./routes/banner.routes");
+const sellerRoute = require("./routes/seller.routes");
 
 const app = express();
 
@@ -44,6 +44,8 @@ app.get("/redirect", (req, res) => {
   res.status(200).send("Payment redirect endpoint is working.");
 });
 app.use('/banners', bannerRoute);
+app.use('/seller', sellerRoute);
+
 
 app.use(errorHandler);
 const startServer = async () => {
