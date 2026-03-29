@@ -18,7 +18,7 @@ const cartRoute = require("./routes/cart.routes")
 // app routes imports :__:
 const orderRoutes = require("./routes/order.routes");
 const paymentRoutes = require("./routes/payment.routes");
-
+const bannerRoute = require("./routes/banner.routes");
 
 const app = express();
 
@@ -41,6 +41,7 @@ app.use('/admin', adminRoute);
 app.use('/cart', cartRoute);
 app.use('/orders', orderRoutes);
 app.use('/payments', paymentRoutes);
+app.use('/banners', bannerRoute);
 
 app.use(errorHandler);
 const startServer = async () => {
