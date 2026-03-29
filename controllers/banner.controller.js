@@ -37,8 +37,8 @@ exports.updateBanner = async (req, res, next) => {
 
 exports.deleteBanner = async (req, res, next) => {
     try {
-        await bannerService.deleteBanner(req.params.id);
-        res.status(204).send();
+        const banner = await bannerService.deleteBanner(req.params.id);
+        res.status(200).json({ success: true, message: `Banner ${banner.title} deleted successfully` });
     } catch (err) { next(err); }
 };
 
