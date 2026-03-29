@@ -23,8 +23,11 @@ exports.registerUser = async (userData) => {
         password: hashedPassword
     });
 
-    // Trigger Welcome Email
-    await emailService.sendWelcomeEmail(user);
+    try {
+        await emailService.sendWelcomeEmail(user);
+    } catch (emailError) {
+        console.error('📧 Email Service Error:', emailError.message);
+    }
 
     const userObj = user.toObject();
     delete userObj.password;
@@ -35,7 +38,7 @@ exports.registerUser = async (userData) => {
 
 exports.loginUser = async (email, password) => {
     const user = await User.findOne({ email }).select('+password');
-    if (!user) throw new APIError('User not found', 403);
+    if (!user) throw new APIError('User not found', 404);
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) throw new APIError('Invalid password', 401);
@@ -65,7 +68,7 @@ exports.googleOAuth = async (code) => {
 
     // 3. Find or Create user in your DB
     let user = await User.findOne({ email: profile.email });
-    console.log("user row data from google: ", profile)
+
     if (!user) {
         user = await User.create({
             name: profile.name,
@@ -78,8 +81,11 @@ exports.googleOAuth = async (code) => {
             }
         });
 
-        // Trigger Welcome Email for new Google users
-        await emailService.sendWelcomeEmail(user);
+        try {
+            await emailService.sendWelcomeEmail(user);
+        } catch (e) {
+            console.error('📧 Google Signup Email Error:', e.message);
+        }
     }
 
     // 4. Generate your app's JWT
