@@ -28,6 +28,20 @@ exports.addItemToCart = async(userId,sessionId,productId,quantity)=>{
 }
 
 
+//return boolean
+exports.isItemInCart = async(userId,sessionId,productId)=>{
+    const {cart} =await this.getCart(userId,sessionId)
+    let isExist = false
+    for(const item of cart.items){
+        if(item.productId.toString() === productId.toString()){
+            isExist = true
+            break
+        }
+    }
+    return isExist 
+}
+
+
 exports.updateCartItemQuantity = async(userId,sessionId,productId,quantity)=>{
     const {cart} =await this.getCart(userId,sessionId)
     
