@@ -1,11 +1,11 @@
 const Joi = require("joi");
 
-const isItemInCartBodySchema = Joi.object({
+const isItemInCartparamsSchema = Joi.object({
   productId: Joi.string().hex().length(24).required(),
 }).required();
 
 const isItemInCartSchema = {
-  body: isItemInCartBodySchema,
+  params: isItemInCartparamsSchema,
 };
 
 module.exports = isItemInCartSchema;
