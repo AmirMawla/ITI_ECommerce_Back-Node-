@@ -17,7 +17,7 @@ const adminRoute = require("./routes/admin.routes")
 const cartRoute = require("./routes/cart.routes")
 const orderRoutes = require("./routes/order.routes");
 const paymentRoutes = require("./routes/payment.routes");
-
+const bannerRoute = require("./routes/banner.routes");
 
 const app = express();
 
@@ -43,6 +43,7 @@ app.use('/payments', paymentRoutes);
 app.get("/redirect", (req, res) => {
   res.status(200).send("Payment redirect endpoint is working.");
 });
+app.use('/banners', bannerRoute);
 
 app.use(errorHandler);
 const startServer = async () => {
