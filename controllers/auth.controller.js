@@ -1,4 +1,3 @@
-const APIError = require('../Errors/APIError');
 const authService = require('../services/auth.service');
 
 const signup = async (req, res, next) => {
@@ -54,9 +53,52 @@ const googleCallback = async (req, res, next) => {
     }
 };
 
+const forgotPassword = async (req, res, next) => {
+    try {
+        const result = await authService.forgotPassword(req.body.email);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const verifyOTP = async (req, res, next) => {
+    try {
+        const { email, otp } = req.body;
+        const result = await authService.verifyOTP(email, otp);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const resetPassword = async (req, res, next) => {
+    try {
+        const { email, newPassword } = req.body;
+        const result = await authService.resetPassword(email, newPassword);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const changePassword = async (req, res, next) => {
+    try {
+        const { oldPassword, newPassword } = req.body;
+        const result = await authService.changePassword(req.user.id, oldPassword, newPassword);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     signup,
     login,
     googleAuth,
     googleCallback,
+    forgotPassword,
+    verifyOTP,
+    resetPassword,
+    changePassword
 }

@@ -92,3 +92,66 @@ exports.googleOAuth = async (code) => {
     const token = generateToken(user._id, user.role);
     return { user, token };
 };
+
+exports.forgotPassword = async (email) => {
+    const user = await User.findOne({ email });
+    if (!user) throw new APIError('User with this email does not exist', 404);
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.passwordResetOTP = otp;
+    user.passwordResetExpires = Date.now() + 10 * 60 * 1000;
+    user.otpVerified = false;
+    await user.save();
+
+    // Updated to use your RabbitMQ function
+    await emailService.sendPasswordResetOTP(user, otp);
+
+    return { message: 'OTP sent to email' };
+};
+
+exports.verifyOTP = async (email, otp) => {
+    const user = await User.findOne({ email });
+    if (!user) throw new APIError('User not found', 404);
+
+    if (user.isOTPExpired() || user.passwordResetOTP !== otp) {
+        throw new APIError('Invalid or expired OTP', 400);
+    }
+
+    user.otpVerified = true;
+    await user.save();
+
+    return { message: 'OTP verified successfully' };
+};
+
+exports.resetPassword = async (email, newPassword) => {
+    const user = await User.findOne({ email });
+    if (!user) throw new APIError('User not found', 404);
+
+    if (!user.otpVerified) {
+        throw new APIError('OTP not verified', 400);
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.passwordResetOTP = null;
+    user.passwordResetExpires = null;
+    user.otpVerified = false;
+    await user.save();
+
+    // Send confirmation email via RabbitMQ
+    await emailService.sendPasswordResetConfirmation(user);
+
+    return { message: 'Password reset successful' };
+};
+
+exports.changePassword = async (userId, oldPassword, newPassword) => {
+    const user = await User.findById(userId).select('+password');
+    if (!user) throw new APIError('User not found', 404);
+
+    const isMatch = await user.comparePassword(oldPassword);
+    if (!isMatch) throw new APIError('Current password is incorrect', 401);
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return { message: 'Password updated successfully' };
+};
