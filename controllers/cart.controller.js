@@ -30,10 +30,10 @@ exports.isItemInCart = async (req,res,next) =>{
     try{
         const userId = req.user ? req.user.id : null;
         const sessionId = req.headers['x-session-id'];
-        const{productId, quantity} = req.body;
+        const{productId} = req.body;
 
         const isExist = await cartService.isItemInCart(userId,sessionId,productId)
-        if(!isExist) res.status(404).json({ success: false, message:"item not found in cart. try to use addItemToCart instead"});
+        if(!isExist) res.status(404).json({ isExist});
 
         res.status(200).json({ isExist });
     }catch(error){
