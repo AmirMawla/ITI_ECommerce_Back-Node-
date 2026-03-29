@@ -53,7 +53,7 @@ exports.removeItemFromCart = async(userId,sessionId,productId)=>{
 exports.mergeGuestCart = async (userId,sessionId)=>{
     const guestCart = await Cart.findOne({sessionId, userId: null})
     if(!guestCart) return {message:"No guest cart to merge"}
-    const userCart = await Cart.findOne({userId})
+    let userCart = await Cart.findOne({userId})
     let finalCart ;
     if(userCart && userCart.items.length > 0){
         for(const item of guestCart.items){
@@ -67,9 +67,29 @@ exports.mergeGuestCart = async (userId,sessionId)=>{
         await guestCart.save()
         finalCart = guestCart
     }else{
-        guestCart.userId = userId
-        await guestCart.save()
-        finalCart = guestCart
+        let linked = await Cart.findOne({ userId })
+        if (linked) {
+            for (const item of guestCart.items) {
+                await linked.addItem(item.productId, item.quantity, item.priceAtAddTime)
+            }
+            await Cart.findByIdAndDelete(guestCart._id)
+            finalCart = linked
+        } else {
+            guestCart.userId = userId
+            try {
+                await guestCart.save()
+                finalCart = guestCart
+            } catch (e) {
+                if (e?.code !== 11000) throw e
+                linked = await Cart.findOne({ userId })
+                if (!linked) throw e
+                for (const item of guestCart.items) {
+                    await linked.addItem(item.productId, item.quantity, item.priceAtAddTime)
+                }
+                await Cart.findByIdAndDelete(guestCart._id)
+                finalCart = linked
+            }
+        }
     }
     return {cart: finalCart, message:"Guest cart merged to user cart"}
 }

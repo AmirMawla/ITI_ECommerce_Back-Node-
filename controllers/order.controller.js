@@ -97,7 +97,8 @@ const getVendorOrder = async (req, res, next) => {
 const addOrder = async (req, res, next) => {
   try {
     const currentUser = getCurrentUser(req);
-    const data = await orderService.createOrder(currentUser.userId, req.body);
+    const sessionId = req.headers["x-session-id"];
+    const data = await orderService.createOrder(currentUser.userId, req.body, sessionId);
     res.status(201).json({ success: true, data });
   } catch (error) {
     next(error);
@@ -107,7 +108,8 @@ const addOrder = async (req, res, next) => {
 const addCashOrder = async (req, res, next) => {
   try {
     const currentUser = getCurrentUser(req);
-    const data = await orderService.createCashOrder(currentUser.userId);
+    const sessionId = req.headers["x-session-id"];
+    const data = await orderService.createCashOrder(currentUser.userId, sessionId);
     res.status(201).json({ success: true, data });
   } catch (error) {
     next(error);
@@ -118,7 +120,8 @@ const checkout = async (req, res, next) => {
   try {
     const currentUser = getCurrentUser(req);
     const userId = req.body.userId || currentUser.userId;
-    const data = await orderService.checkout(userId);
+    const sessionId = req.headers["x-session-id"];
+    const data = await orderService.checkout(userId, sessionId);
     res.status(200).json({ success: true, data });
   } catch (error) {
     next(error);

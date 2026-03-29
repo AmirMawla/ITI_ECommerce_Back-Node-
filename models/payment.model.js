@@ -70,7 +70,7 @@ const paymentSchema = new mongoose.Schema(
 );
 
 // ─── Indexes ────────────────────────────────────────────────────────────────
-paymentSchema.index({ orderId: 1 });
+// orderId: unique index comes from field definition above (avoid duplicate index)
 paymentSchema.index({ paymentStatus: 1 });
 paymentSchema.index({ transactionId: 1 }, { sparse: true });
 paymentSchema.index({ "paidBy.userId": 1 });

@@ -5,7 +5,9 @@ const Payment = require("../models/payment.model");
 const Shipping = require("../models/shipping.model");
 const Review = require("../models/review.model");
 const Cart = require("../models/cart.model");
+const APIError = require("../Errors/APIError");
 const OrderErrors = require("../Errors/OrderErrors");
+const cartService = require("./cart.service");
 const kashierService = require("./kashier.service");
 const { sendOrderStatusChangedEmail } = require("./email.service");
 
@@ -101,6 +103,44 @@ const updateOrderStatusByShippings = (order, shippings) => {
   order.status = "pending";
 };
 
+const normalizeVendorId = (vendorRef) => {
+  if (!vendorRef) return null;
+  if (typeof vendorRef === "object" && vendorRef._id) return vendorRef._id;
+  return vendorRef;
+};
+
+const buildShippingDocsForOrder = (orderId, orderItems) => {
+  const shippingSeen = new Set();
+  const shippingDocs = [];
+  for (const line of orderItems) {
+    const vid = line.vendorId;
+    if (!vid) continue;
+    const key = String(vid);
+    if (shippingSeen.has(key)) continue;
+    shippingSeen.add(key);
+    shippingDocs.push({
+      orderId,
+      vendorId: vid,
+      status: "preparing",
+      estimatedDeliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    });
+  }
+  return shippingDocs;
+};
+
+const computeTotalsFromCart = (cart, orderItems) => {
+  const subtotal = orderItems.reduce((sum, i) => sum + Number(i.priceAtOrder) * Number(i.quantity), 0);
+  const discountAmountRaw = Number(cart?.discountAmount || 0);
+  const discountAmount = Number.isFinite(discountAmountRaw) ? Math.max(0, discountAmountRaw) : 0;
+  const totalAmount = Math.max(0, subtotal - discountAmount);
+  return {
+    subtotal,
+    discountAmount,
+    totalAmount,
+    promoCode: cart?.promoCode || undefined,
+  };
+};
+
 const buildOrderItemsFromCart = (cart) => {
   const items = (cart.items || []).map((item) => {
     const product = item.productId;
@@ -111,7 +151,7 @@ const buildOrderItemsFromCart = (cart) => {
       productImage: product.imageUrl || product.images?.[0]?.url || null,
       priceAtOrder: Number(item.priceAtAddTime ?? product.price),
       quantity: Number(item.quantity),
-      vendorId: product.vendorId || null,
+      vendorId: normalizeVendorId(product.vendorId),
     };
   }).filter(Boolean);
 
@@ -159,6 +199,9 @@ const getOrderById = async (orderId) => {
     id: order._id,
     userId: order.userId?._id || order.userId,
     customerName: order.userId?.name,
+    subtotal: order.subtotal ?? null,
+    discountAmount: order.discountAmount ?? 0,
+    promoCode: order.promoCode ?? null,
     totalAmount: order.totalAmount,
     orderDate: order.orderDate,
     status: order.status,
@@ -198,6 +241,12 @@ const getOrderDetails = async (orderId, currentUserId, isAdmin) => {
 
   return {
     id: order._id,
+    subtotal: order.subtotal ?? null,
+    discountAmount: order.discountAmount ?? 0,
+    promoCode: order.promoCode ?? null,
+    totalAmount: order.totalAmount,
+    orderDate: order.orderDate,
+    status: order.status,
     vendors: vendorSummaries.map((v) => {
       const vendor = vendorMap.get(String(v.vendorId));
       const shipping = shippingMap.get(String(v.vendorId));
@@ -205,7 +254,7 @@ const getOrderDetails = async (orderId, currentUserId, isAdmin) => {
         vendorId: v.vendorId,
         vendorName: vendor?.sellerProfile?.storeName || vendor?.name || "Unknown Vendor",
         vendorPhone: vendor?.phone || null,
-        totalAmount: v.total,
+        vendorSubtotal: v.total,
         totalQuantity: v.quantity,
         items: v.items,
         estimatedDeliveryDate: shipping?.estimatedDeliveryDate || null,
@@ -235,6 +284,7 @@ const getOrderForSpecificVendor = async (orderId, vendorId, currentUserId, isAdm
   ]);
 
   const reviewMap = new Map(reviews.map((r) => [String(r.productId), r]));
+  const vendorSubtotal = vendorItems.reduce((a, b) => a + Number(b.quantity) * Number(b.priceAtOrder), 0);
   return {
     vendorOrder: {
       orderId: order._id,
@@ -244,7 +294,12 @@ const getOrderForSpecificVendor = async (orderId, vendorId, currentUserId, isAdm
       status: order.status,
       orderDate: order.orderDate,
       totalQuantity: vendorItems.reduce((a, b) => a + Number(b.quantity), 0),
-      totalAmount: vendorItems.reduce((a, b) => a + Number(b.quantity) * Number(b.priceAtOrder), 0),
+      vendorSubtotal,
+      // Order-level totals (after discount) so APIs are consistent everywhere
+      subtotal: order.subtotal ?? null,
+      discountAmount: order.discountAmount ?? 0,
+      promoCode: order.promoCode ?? null,
+      totalAmount: order.totalAmount,
     },
     products: vendorItems.map((item) => ({
       productId: item.productId,
@@ -340,6 +395,9 @@ const getAllOrders = async (request) => {
     userId: o.userId?._id || o.userId,
     userName: o.userId?.name,
     vendors: toVendorSummary(o.items || []).map((v) => ({ vendorId: v.vendorId, totalAmount: v.total, totalQuantity: v.quantity })),
+    subtotal: o.subtotal ?? null,
+    discountAmount: o.discountAmount ?? 0,
+    promoCode: o.promoCode ?? null,
     totalAmount: o.totalAmount,
     orderDate: o.orderDate,
     status: o.status,
@@ -378,9 +436,14 @@ const getVendorOrders = async (requestedVendorId, currentUser, request) => {
   const data = orders.map((o) => {
     const vendorItems = (o.items || []).filter((i) => String(i.vendorId) === String(vendorId));
     const vendorShippingStatus = shippingMap.get(String(o._id)) || o.status;
+    const vendorSubtotal = vendorItems.reduce((a, b) => a + Number(b.priceAtOrder) * Number(b.quantity), 0);
     return {
       id: o._id,
-      totalAmount: vendorItems.reduce((a, b) => a + Number(b.priceAtOrder) * Number(b.quantity), 0),
+      vendorSubtotal,
+      subtotal: o.subtotal ?? null,
+      discountAmount: o.discountAmount ?? 0,
+      promoCode: o.promoCode ?? null,
+      totalAmount: o.totalAmount,
       orderDate: o.orderDate,
       status: vendorShippingStatus, 
       items: vendorItems.map((i) => ({
@@ -406,10 +469,15 @@ const getVendorOrder = async (orderId, vendorId) => {
 
   const shipping = await Shipping.findOne({ orderId, vendorId }).lean();
   const vendorShippingStatus = shipping?.status || order.status;
+  const vendorSubtotal = vendorItems.reduce((a, b) => a + Number(b.priceAtOrder) * Number(b.quantity), 0);
 
   return {
     id: order._id,
-    totalAmount: vendorItems.reduce((a, b) => a + Number(b.priceAtOrder) * Number(b.quantity), 0),
+    vendorSubtotal,
+    subtotal: order.subtotal ?? null,
+    discountAmount: order.discountAmount ?? 0,
+    promoCode: order.promoCode ?? null,
+    totalAmount: order.totalAmount,
     orderDate: order.orderDate,
     status: vendorShippingStatus,
     items: vendorItems.map((i) => ({
@@ -423,213 +491,218 @@ const getVendorOrder = async (orderId, vendorId) => {
   };
 };
 
-const createOrder = async (userId, payload = {}) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+const mapTransactionError = (error, label) => {
+  if (error?.statusCode) return error;
+  if (error?.name === "ValidationError") {
+    return new APIError(error.message || "Validation failed.", 400);
+  }
+  if (error?.code === 11000) {
+    const detail = error.message || JSON.stringify(error.keyValue || {});
+    return new APIError(detail, 409);
+  }
+  console.error(`[${label}]`, error?.message || error, error?.stack);
+  const wrapped = new APIError("Order creation failed.", 400);
+  wrapped.cause = error;
+  return wrapped;
+};
+
+
+const rollbackDraftOrder = async (orderId) => {
+  if (!orderId) return;
+  await Shipping.deleteMany({ orderId }).catch(() => {});
+  await Payment.deleteOne({ orderId }).catch(() => {});
+  await Order.findByIdAndDelete(orderId).catch(() => {});
+};
+
+const createOrder = async (userId, payload = {}, sessionId) => {
+  if (sessionId) {
+    await cartService.mergeGuestCart(userId, sessionId);
+  }
+  let draftOrderId = null;
   try {
     const [cart, user] = await Promise.all([
-      Cart.findOne({ userId }).populate("items.productId").session(session),
-      User.findById(userId).select("email").session(session),
+      Cart.findOne({ userId }).populate("items.productId"),
+      User.findById(userId).select("email"),
     ]);
     if (!cart || !cart.items?.length) throw OrderErrors.CartNotFoundOrEmpty;
 
     const orderItems = buildOrderItemsFromCart(cart);
-    const totalAmount = orderItems.reduce((sum, i) => sum + i.priceAtOrder * i.quantity, 0);
+    const totals = computeTotalsFromCart(cart, orderItems);
 
-    const order = await Order.create(
-      [
-        {
-          userId,
-          totalAmount,
-          orderDate: new Date(),
-          status: "pending",
-          items: orderItems,
-          paymentMethod: "credit_card",
-          guestEmail: user?.email || undefined,
-        },
-      ],
-      { session }
-    );
+    const order = await Order.create([
+      {
+        userId,
+        totalAmount: totals.totalAmount,
+        subtotal: totals.subtotal,
+        discountAmount: totals.discountAmount,
+        promoCode: totals.promoCode,
+        orderDate: new Date(),
+        status: "pending",
+        items: orderItems,
+        paymentMethod: "credit_card",
+        guestEmail: user?.email || undefined,
+      },
+    ]);
 
     const createdOrder = order[0];
-    const payment = await Payment.create(
-      [
-        {
-          orderId: createdOrder._id,
-          totalAmount,
-          paymentMethod: "credit_card",
-          paymentStatus: "pending",
-          paidBy: { userId, email: user?.email },
-        },
-      ],
-      { session }
-    );
+    draftOrderId = createdOrder._id;
+
+    const payment = await Payment.create([
+      {
+        orderId: createdOrder._id,
+        totalAmount: totals.totalAmount,
+        paymentMethod: "credit_card",
+        paymentStatus: "pending",
+        paidBy: { userId, email: user?.email },
+      },
+    ]);
     createdOrder.paymentId = payment[0]._id;
 
-    const vendorIds = [...new Set(orderItems.map((i) => String(i.vendorId)).filter(Boolean))];
-    const shippingDocs = vendorIds.map((vendorId) => ({
-      orderId: createdOrder._id,
-      vendorId,
-      status: "preparing",
-      estimatedDeliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-    }));
-    if (shippingDocs.length) await Shipping.insertMany(shippingDocs, { session });
+    const shippingDocs = buildShippingDocsForOrder(createdOrder._id, orderItems);
+    if (shippingDocs.length) await Shipping.insertMany(shippingDocs);
 
     const providerSession = await kashierService.createPaymentSession({
-      amount: totalAmount,
+      amount: totals.totalAmount,
       orderId: `ORDER-${createdOrder._id}`,
       notes: payload.notes || "Order payment",
     });
     if (!providerSession?._id) throw OrderErrors.PaymentSessionCreationFailed;
 
     payment[0].gatewayPaymentId = providerSession._id;
-    await payment[0].save({ session });
+    await payment[0].save();
+    await createdOrder.save();
 
-    cart.items = [];
-    await cart.save({ session });
-    await createdOrder.save({ session });
-    await session.commitTransaction();
-    session.endSession();
+    await cart.clear();
+
+    draftOrderId = null;
 
     return {
       order: await getOrderById(createdOrder._id),
       paymentSession: {
         sessionId: providerSession._id,
         orderId: providerSession?.paymentParams?.order || `ORDER-${createdOrder._id}`,
-        amount: providerSession?.paymentParams?.amount || totalAmount,
+        amount: providerSession?.paymentParams?.amount || totals.totalAmount,
         sessionUrl: providerSession?.sessionUrl,
       },
     };
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    if (error?.statusCode) throw error;
-    throw OrderErrors.OrderCreationFailed;
+    await rollbackDraftOrder(draftOrderId);
+    throw mapTransactionError(error, "createOrder");
   }
 };
 
-const createCashOrder = async (userId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+const createCashOrder = async (userId, sessionId) => {
+  if (sessionId) {
+    await cartService.mergeGuestCart(userId, sessionId);
+  }
+  let draftOrderId = null;
   try {
     const [cart, user] = await Promise.all([
-      Cart.findOne({ userId }).populate("items.productId").session(session),
-      User.findById(userId).select("email").session(session),
+      Cart.findOne({ userId }).populate("items.productId"),
+      User.findById(userId).select("email"),
     ]);
     if (!cart || !cart.items?.length) throw OrderErrors.CartNotFoundOrEmpty;
 
     const orderItems = buildOrderItemsFromCart(cart);
-    const totalAmount = orderItems.reduce((sum, i) => sum + i.priceAtOrder * i.quantity, 0);
+    const totals = computeTotalsFromCart(cart, orderItems);
 
-    const order = await Order.create(
-      [
-        {
-          userId,
-          totalAmount,
-          orderDate: new Date(),
-          status: "pending",
-          items: orderItems,
-          paymentMethod: "cash_on_delivery",
-          guestEmail: user?.email || undefined,
-        },
-      ],
-      { session }
-    );
+    const order = await Order.create([
+      {
+        userId,
+        totalAmount: totals.totalAmount,
+        subtotal: totals.subtotal,
+        discountAmount: totals.discountAmount,
+        promoCode: totals.promoCode,
+        orderDate: new Date(),
+        status: "pending",
+        items: orderItems,
+        paymentMethod: "cash_on_delivery",
+        guestEmail: user?.email || undefined,
+      },
+    ]);
     const createdOrder = order[0];
+    draftOrderId = createdOrder._id;
 
-    const payment = await Payment.create(
-      [
-        {
-          orderId: createdOrder._id,
-          totalAmount,
-          paymentMethod: "cash_on_delivery",
-          paymentStatus: "pending",
-          paidBy: { userId, email: user?.email },
-        },
-      ],
-      { session }
-    );
+    const payment = await Payment.create([
+      {
+        orderId: createdOrder._id,
+        totalAmount: totals.totalAmount,
+        paymentMethod: "cash_on_delivery",
+        paymentStatus: "pending",
+        paidBy: { userId, email: user?.email },
+      },
+    ]);
 
     createdOrder.paymentId = payment[0]._id;
-    const vendorIds = [...new Set(orderItems.map((i) => String(i.vendorId)).filter(Boolean))];
-    const shippingDocs = vendorIds.map((vendorId) => ({
-      orderId: createdOrder._id,
-      vendorId,
-      status: "preparing",
-      estimatedDeliveryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-    }));
-    if (shippingDocs.length) await Shipping.insertMany(shippingDocs, { session });
+    const shippingDocsCash = buildShippingDocsForOrder(createdOrder._id, orderItems);
+    if (shippingDocsCash.length) await Shipping.insertMany(shippingDocsCash);
 
-    cart.items = [];
-    await cart.save({ session });
-    await createdOrder.save({ session });
-    await session.commitTransaction();
-    session.endSession();
+    await createdOrder.save();
+
+    await cart.clear();
+
+    draftOrderId = null;
 
     return getOrderById(createdOrder._id);
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    if (error?.statusCode) throw error;
-    throw OrderErrors.OrderCreationFailed;
+    await rollbackDraftOrder(draftOrderId);
+    throw mapTransactionError(error, "createCashOrder");
   }
 };
 
-const checkout = async (userId) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+const checkout = async (userId, sessionId) => {
+  if (sessionId) {
+    await cartService.mergeGuestCart(userId, sessionId);
+  }
+  let draftOrderId = null;
   try {
     const [cart, user] = await Promise.all([
-      Cart.findOne({ userId }).populate("items.productId").session(session),
-      User.findById(userId).select("email").session(session),
+      Cart.findOne({ userId }).populate("items.productId"),
+      User.findById(userId).select("email"),
     ]);
     if (!cart || !cart.items?.length) throw OrderErrors.CartNotFoundOrEmpty;
 
     const orderItems = buildOrderItemsFromCart(cart);
-    const totalAmount = orderItems.reduce((sum, i) => sum + i.priceAtOrder * i.quantity, 0);
+    const totals = computeTotalsFromCart(cart, orderItems);
 
-    const order = await Order.create(
-      [
-        {
-          userId,
-          totalAmount,
-          orderDate: new Date(),
-          status: "pending",
-          items: orderItems,
-          paymentMethod: "credit_card",
-          guestEmail: user?.email || undefined,
-        },
-      ],
-      { session }
-    );
+    const order = await Order.create([
+      {
+        userId,
+        totalAmount: totals.totalAmount,
+        subtotal: totals.subtotal,
+        discountAmount: totals.discountAmount,
+        promoCode: totals.promoCode,
+        orderDate: new Date(),
+        status: "pending",
+        items: orderItems,
+        paymentMethod: "credit_card",
+        guestEmail: user?.email || undefined,
+      },
+    ]);
 
     const createdOrder = order[0];
-    const payment = await Payment.create(
-      [
-        {
-          orderId: createdOrder._id,
-          totalAmount,
-          paymentMethod: "credit_card",
-          paymentStatus: "completed",
-          paidBy: { userId, email: user?.email },
-        },
-      ],
-      { session }
-    );
-    createdOrder.paymentId = payment[0]._id;
+    draftOrderId = createdOrder._id;
 
-    cart.items = [];
-    await cart.save({ session });
-    await createdOrder.save({ session });
-    await session.commitTransaction();
-    session.endSession();
+    const payment = await Payment.create([
+      {
+        orderId: createdOrder._id,
+        totalAmount: totals.totalAmount,
+        paymentMethod: "credit_card",
+        paymentStatus: "completed",
+        paidBy: { userId, email: user?.email },
+      },
+    ]);
+    createdOrder.paymentId = payment[0]._id;
+    await createdOrder.save();
+
+    await cart.clear();
+
+    draftOrderId = null;
 
     return getOrderById(createdOrder._id);
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-    if (error?.statusCode) throw error;
-    throw OrderErrors.OrderCreationFailed;
+    await rollbackDraftOrder(draftOrderId);
+    throw mapTransactionError(error, "checkout");
   }
 };
 

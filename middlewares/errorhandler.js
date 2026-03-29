@@ -2,6 +2,9 @@ const APIError = require('../Errors/APIError');
 
 module.exports = (err, req, res, next) => {
     console.error("❌❌ Error:", err.stack);
+    if (err.cause) {
+        console.error("Caused by:", err.cause?.message || err.cause, err.cause?.stack);
+    }
 
     if (err instanceof APIError) {
         return res.status(err.statusCode).json({ message: err.message, success: false, isClientError: err.isClientError })

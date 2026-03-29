@@ -15,7 +15,6 @@ const authRoute = require("./routes/auth.routes")
 const usersRoute = require("./routes/user.routes")
 const adminRoute = require("./routes/admin.routes")
 const cartRoute = require("./routes/cart.routes")
-// app routes imports :__:
 const orderRoutes = require("./routes/order.routes");
 const paymentRoutes = require("./routes/payment.routes");
 
@@ -41,6 +40,9 @@ app.use('/admin', adminRoute);
 app.use('/cart', cartRoute);
 app.use('/orders', orderRoutes);
 app.use('/payments', paymentRoutes);
+app.get("/redirect", (req, res) => {
+  res.status(200).send("Payment redirect endpoint is working.");
+});
 
 app.use(errorHandler);
 const startServer = async () => {
@@ -49,6 +51,9 @@ const startServer = async () => {
 
     await mongoose.connect(`${process.env.MONGODB_URI}/${process.env.DB_NAME}`);
     console.log('✅ Connected to MongoDB');
+
+    const Shipping = require("./models/shipping.model");
+    await Shipping.syncIndexes();
 
     await connectRabbitMQ();
 
