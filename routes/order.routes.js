@@ -74,7 +74,7 @@ router.post(
 router.put(
   "/:id/status",
   Authentication,
-  restrictTo(["seller"]),
+  restrictTo(["seller","admin"]),
   validate(orderSchemas.updateShipmentStatusSchema),
   orderController.updateOrderStatus
 );
