@@ -5,7 +5,7 @@ const adminProductController = require('../controllers/adminProduct.controller')
 const { Authentication } = require('../middlewares/Authentication');
 const restrictTo = require('../middlewares/restrictTo');
 const bannerController = require('../controllers/banner.controller');
-const bannerSchemas = require('../schemas/banner');
+const bannerSchemas = require('../schemas/banners');
 const validate = require('../middlewares/validate');
 
 
