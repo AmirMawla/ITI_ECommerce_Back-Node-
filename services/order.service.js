@@ -841,6 +841,66 @@ const getTopFiveRecentOrders = async (vendorId, count = 5) => {
   }));
 };
 
+const getCheckoutPreview = async (userId, sessionId) => {
+  if (sessionId) {
+    await cartService.mergeGuestCart(userId, sessionId);
+  }
+
+  const cart = await Cart.findOne({ userId }).populate("items.productId");
+  if (!cart || !cart.items?.length) throw OrderErrors.CartNotFoundOrEmpty;
+
+  const orderItems = buildOrderItemsFromCart(cart);
+  const totals = computeTotalsFromCart(cart, orderItems);
+
+  const vendorIds = Array.from(
+    new Set(
+      (orderItems || [])
+        .map((i) => i.vendorId)
+        .filter((v) => v && v !== "null")
+        .map((v) => String(v))
+    )
+  );
+
+  const vendors =
+    vendorIds.length > 0
+      ? await User.find({ _id: { $in: vendorIds } })
+          .select("_id name sellerProfile.storeName")
+          .lean()
+      : [];
+
+  const vendorMap = new Map(vendors.map((v) => [String(v._id), v]));
+
+  const items = orderItems.map((i) => {
+    const vendorName =
+      (i.vendorId && vendorMap.get(String(i.vendorId))?.sellerProfile?.storeName) ||
+      (i.vendorId && vendorMap.get(String(i.vendorId))?.name) ||
+      "Unknown Vendor";
+
+    const price = Number(i.priceAtOrder);
+    const quantity = Number(i.quantity);
+
+    return {
+      vendorId: i.vendorId ? String(i.vendorId) : null,
+      vendorName,
+      productId: i.productId ? String(i.productId) : '',
+      productName: i.productName,
+      productImage: i.productImage,
+      price,
+      quantity,
+      lineTotal: price * quantity,
+    };
+  });
+
+  return {
+    subtotal: totals.subtotal,
+    discountAmount: totals.discountAmount,
+    promoCode: totals.promoCode ?? null,
+    totalAmount: totals.totalAmount,
+    itemCount: items.reduce((sum, i) => sum + i.quantity, 0),
+    items,
+  };
+};
+
 module.exports = {
   getOrderById,
   getOrderDetails,
@@ -856,4 +916,5 @@ module.exports = {
   updateShipmentStatus,
   handleWebhook,
   getTopFiveRecentOrders,
+  getCheckoutPreview,
 };

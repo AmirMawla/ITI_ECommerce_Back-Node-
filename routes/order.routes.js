@@ -7,6 +7,13 @@ const orderSchemas = require("../schemas/orders");
 
 const router = express.Router();
 
+router.get(
+  "/checkout-preview",
+  Authentication,
+  restrictTo(["customer"]),
+  orderController.getCheckoutPreview
+);
+
 
 router.get(
   "/users",
@@ -55,6 +62,8 @@ router.post(
   orderController.addCashOrder
 );
 
+
+
 router.post(
   "/checkout",
   Authentication,
@@ -62,6 +71,8 @@ router.post(
   validate(orderSchemas.checkoutSchema),
   orderController.checkout
 );
+
+
 
 router.post(
   "/:orderId/cancel",
@@ -119,5 +130,9 @@ router.get(
   validate(orderSchemas.getVendorOrderSchema),
   orderController.getVendorOrder
 );
+
+
+
+
 
 module.exports = router;
