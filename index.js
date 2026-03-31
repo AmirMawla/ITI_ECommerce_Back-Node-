@@ -18,6 +18,9 @@ const orderRoutes = require("./routes/order.routes");
 const paymentRoutes = require("./routes/payment.routes");
 const bannerRoute = require("./routes/banner.routes");
 const sellerRoute = require("./routes/seller.routes");
+const productRoutes = require("./routes/product.routes");
+const categoryRoutes = require("./routes/category.routes");
+
 
 const app = express();
 
@@ -44,6 +47,8 @@ app.use('/banners', bannerRoute);
 app.use('/seller', sellerRoute);
 
 
+app.use('/products', productRoutes);
+app.use('/categories', categoryRoutes);
 app.use(errorHandler);
 const startServer = async () => {
   try {
