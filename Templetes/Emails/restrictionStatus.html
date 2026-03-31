@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Status Update</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f7;
+            color: #51545e;
+            margin: 0;
+            padding: 0;
+            width: 100% !important;
+        }
+        .wrapper {
+            width: 100%;
+            table-layout: fixed;
+            background-color: #f4f4f7;
+            padding-bottom: 40px;
+        }
+        .main-content {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 3px rgba(0, 0, 0, 0.16);
+            margin-top: 40px;
+        }
+        .header {
+            padding: 25px;
+            text-align: center;
+            background-color: #333333;
+            color: #ffffff;
+        }
+        .body-section {
+            padding: 35px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 12px;
+            margin-bottom: 20px;
+        }
+        /* Conditional styling based on status string */
+        .status-restricted { background-color: #fff1f0; color: #cf1322; border: 1px solid #ffa39e; }
+        .status-restored { background-color: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; }
+
+        h1 { font-size: 19px; color: #333333; margin-top: 0; }
+        p { font-size: 16px; line-height: 1.625; color: #51545e; }
+        
+        .footer {
+            text-align: center;
+            padding: 25px;
+            font-size: 12px;
+            color: #6b6e76;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #999999;
+            margin-top: 20px;
+            border-top: 1px solid #eaeaeb;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <table class="main-content" cellpadding="0" cellspacing="0">
+            <tr>
+                <td class="header">
+                    <h2>BrandName</h2>
+                </td>
+            </tr>
+            <tr>
+                <td class="body-section">
+                    <div class="status-badge status-{{status}}">
+                        Account {{status}}
+                    </div>
+                    
+                    <h1>Hello {{userName}},</h1>
+                    <p>{{message}}</p>
+                    
+                    <p>If you believe this was a mistake or have any questions, please reply to this email to contact our support team.</p>
+                    
+                    <div class="timestamp">
+                        <strong>Event logged at:</strong> {{timestamp}}
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td class="footer">
+                    &copy; 2026 BrandName Inc. All rights reserved.<br>
+                    123 Tech Lane, Silicon Valley, CA.
+                </td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>
