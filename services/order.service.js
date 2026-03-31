@@ -132,10 +132,12 @@ const computeTotalsFromCart = (cart, orderItems) => {
   const subtotal = orderItems.reduce((sum, i) => sum + Number(i.priceAtOrder) * Number(i.quantity), 0);
   const discountAmountRaw = Number(cart?.discountAmount || 0);
   const discountAmount = Number.isFinite(discountAmountRaw) ? Math.max(0, discountAmountRaw) : 0;
-  const totalAmount = Math.max(0, subtotal - discountAmount);
+  const shippingFee = 50;
+  const totalAmount = Math.max(0, subtotal - discountAmount + shippingFee);
   return {
     subtotal,
     discountAmount,
+    shippingFee,
     totalAmount,
     promoCode: cart?.promoCode || undefined,
   };
@@ -161,7 +163,19 @@ const buildOrderItemsFromCart = (cart) => {
 
 const applyCommonFilters = async (baseFilter, request = {}) => {
   const statuses = normalizeStatuses(request.statuses);
-  if (statuses?.length) baseFilter.status = { $in: statuses };
+
+  if (statuses?.length) {
+    // Always exclude "notpayed" from filtered results
+    const filteredStatuses = statuses.filter((s) => s !== "notpayed");
+    if (filteredStatuses.length) {
+      baseFilter.status = { $in: filteredStatuses };
+    } else {
+      baseFilter.status = { $ne: "notpayed" };
+    }
+  } else {
+    // Default: exclude "notpayed" everywhere
+    baseFilter.status = { $ne: "notpayed" };
+  }
 
   if (request.date) {
     const d = new Date(request.date);
@@ -186,7 +200,7 @@ const applyCommonFilters = async (baseFilter, request = {}) => {
 
 const getOrderById = async (orderId) => {
   const order = await Order.findById(orderId).populate("userId", "name email").lean();
-  if (!order) throw OrderErrors.OrderNotFound;
+  if (!order || order.status === "notpayed") throw OrderErrors.OrderNotFound;
 
   const payment = order.paymentId ? await Payment.findById(order.paymentId).lean() : null;
   const vendorSummaries = toVendorSummary(order.items || []);
@@ -201,6 +215,7 @@ const getOrderById = async (orderId) => {
     customerName: order.userId?.name,
     subtotal: order.subtotal ?? null,
     discountAmount: order.discountAmount ?? 0,
+    shippingFee: order.shippingFee ?? 0,
     promoCode: order.promoCode ?? null,
     totalAmount: order.totalAmount,
     orderDate: order.orderDate,
@@ -226,13 +241,13 @@ const getOrderById = async (orderId) => {
 
 const getOrderDetails = async (orderId, currentUserId, isAdmin) => {
   const order = await Order.findById(orderId).populate("userId", "name email address").lean();
-  if (!order) throw OrderErrors.OrderNotFound;
+  if (!order || order.status === "notpayed") throw OrderErrors.OrderNotFound;
   if (!isAdmin && String(order.userId?._id || order.userId) !== String(currentUserId)) throw OrderErrors.AccessDenied;
 
   const vendorSummaries = toVendorSummary(order.items || []);
   const vendorIds = vendorSummaries.map((v) => v.vendorId).filter(Boolean);
   const [vendors, shippings] = await Promise.all([
-    User.find({ _id: { $in: vendorIds } }).select("_id name phone sellerProfile.storeName").lean(),
+    User.find({ _id: { $in: vendorIds } }).select("_id name phone sellerProfile.storeName profilePicture").lean(),
     Shipping.find({ orderId: order._id, vendorId: { $in: vendorIds } }).lean(),
   ]);
 
@@ -243,6 +258,7 @@ const getOrderDetails = async (orderId, currentUserId, isAdmin) => {
     id: order._id,
     subtotal: order.subtotal ?? null,
     discountAmount: order.discountAmount ?? 0,
+    shippingFee: order.shippingFee ?? 0,
     promoCode: order.promoCode ?? null,
     totalAmount: order.totalAmount,
     orderDate: order.orderDate,
@@ -254,6 +270,7 @@ const getOrderDetails = async (orderId, currentUserId, isAdmin) => {
         vendorId: v.vendorId,
         vendorName: vendor?.sellerProfile?.storeName || vendor?.name || "Unknown Vendor",
         vendorPhone: vendor?.phone || null,
+        vendorProfilePicture: vendor?.profilePicture?.url || null,
         vendorSubtotal: v.total,
         totalQuantity: v.quantity,
         items: v.items,
@@ -266,7 +283,7 @@ const getOrderDetails = async (orderId, currentUserId, isAdmin) => {
 
 const getOrderForSpecificVendor = async (orderId, vendorId, currentUserId, isAdmin) => {
   const order = await Order.findById(orderId).populate("userId", "address").lean();
-  if (!order) throw OrderErrors.OrderNotFound;
+  if (!order || order.status === "notpayed") throw OrderErrors.OrderNotFound;
   if (!isAdmin && String(order.userId?._id || order.userId) !== String(currentUserId)) throw OrderErrors.AccessDenied;
 
   const vendorItems = (order.items || []).filter((item) => String(item.vendorId) === String(vendorId));
@@ -333,53 +350,50 @@ const getUserOrders = async (requestedUserId, currentUser) => {
   const limit = Number(currentUser.limit || 10);
   const sort = createSort(currentUser.sortBy || "orderDate", currentUser.sortOrder || "desc");
 
-  const query = Order.find({ userId }).sort(sort).lean();
-  const allOrders = await query;
+  const orders = await Order.find({ userId, status: { $ne: "notpayed" } }).sort(sort).lean();
 
-  const ordersIds = allOrders.map((o) => o._id);
-  const allVendorIds = [
-    ...new Set(allOrders.flatMap((o) => (o.items || []).map((i) => String(i.vendorId))).filter((v) => v && v !== "null")),
-  ];
-
-  const shippings = allOrders.length
-    ? await Shipping.find({ orderId: { $in: ordersIds }, vendorId: { $in: allVendorIds } }).lean()
-    : [];
-  const shippingMap = new Map(
-    shippings.map((s) => [`${String(s.orderId)}_${String(s.vendorId)}`, s.status])
+  const allVendorIds = Array.from(
+    new Set(
+      orders
+        .flatMap((o) => (o.items || []).map((i) => i.vendorId))
+        .filter(Boolean)
+        .map((v) => String(v))
+        .filter((v) => v && v !== "null")
+    )
   );
 
-  const flattened = allOrders.flatMap((order) => {
-    const groups = toVendorSummary(order.items || []);
-    return groups.map((g) => {
-      const vendorShippingStatus = shippingMap.get(`${String(order._id)}_${String(g.vendorId)}`) || "preparing";
-      return {
-        orderId: order._id,
-        vendorId: g.vendorId,
-        vendorName: "Unknown Vendor",
-        status: vendorShippingStatus, 
-        orderDate: order.orderDate,
-        totalQuantity: g.quantity,
-        totalAmount: g.total,
-        items: g.items.map((it) => ({ ...it, status: vendorShippingStatus })), 
-      };
-    });
-  });
-
-  const vendors = await User.find({ _id: { $in: allVendorIds } })
-    .select("_id name sellerProfile.storeName profilePicture")
-    .lean();
+  const vendors = allVendorIds.length
+    ? await User.find({ _id: { $in: allVendorIds } })
+        .select("_id name sellerProfile.storeName profilePicture")
+        .lean()
+    : [];
   const vendorMap = new Map(vendors.map((v) => [String(v._id), v]));
 
-  const enriched = flattened.map((x) => ({
-    ...x,
-    vendorName:
-      vendorMap.get(String(x.vendorId))?.sellerProfile?.storeName ||
-      vendorMap.get(String(x.vendorId))?.name ||
-      "Unknown Vendor",
-    vendorProfilePicture: vendorMap.get(String(x.vendorId))?.profilePicture?.url || null,
-  }));
+  const data = orders.map((order) => {
+    const vendorGroups = toVendorSummary(order.items || []);
+    return {
+      id: order._id,
+      orderDate: order.orderDate,
+      status: order.status,
+      subtotal: order.subtotal ?? null,
+      discountAmount: order.discountAmount ?? 0,
+      promoCode: order.promoCode ?? null,
+      totalAmount: order.totalAmount,
+      itemCount: (order.items || []).reduce((sum, i) => sum + Number(i.quantity || 0), 0),
+      vendors: vendorGroups.map((g) => {
+        const vendor = g.vendorId ? vendorMap.get(String(g.vendorId)) : null;
+        return {
+          vendorId: g.vendorId,
+          vendorName: vendor?.sellerProfile?.storeName || vendor?.name || "Unknown Vendor",
+          vendorProfilePicture: vendor?.profilePicture?.url || null,
+          vendorSubtotal: g.total,
+          totalQuantity: g.quantity,
+        };
+      }),
+    };
+  });
 
-  return paginate(enriched, page, limit);
+  return paginate(data, page, limit);
 };
 
 const getAllOrders = async (request) => {
@@ -462,7 +476,7 @@ const getVendorOrders = async (requestedVendorId, currentUser, request) => {
 
 const getVendorOrder = async (orderId, vendorId) => {
   const order = await Order.findById(orderId).lean();
-  if (!order) throw OrderErrors.OrderNotFound;
+  if (!order || order.status === "notpayed") throw OrderErrors.OrderNotFound;
 
   const vendorItems = (order.items || []).filter((i) => String(i.vendorId) === String(vendorId));
   if (!vendorItems.length) throw OrderErrors.VendorOrderNotFound;
@@ -535,9 +549,10 @@ const createOrder = async (userId, payload = {}, sessionId) => {
         totalAmount: totals.totalAmount,
         subtotal: totals.subtotal,
         discountAmount: totals.discountAmount,
+        shippingFee: totals.shippingFee,
         promoCode: totals.promoCode,
         orderDate: new Date(),
-        status: "pending",
+        status: "notpayed",
         items: orderItems,
         paymentMethod: "credit_card",
         guestEmail: user?.email || undefined,
@@ -558,8 +573,7 @@ const createOrder = async (userId, payload = {}, sessionId) => {
     ]);
     createdOrder.paymentId = payment[0]._id;
 
-    const shippingDocs = buildShippingDocsForOrder(createdOrder._id, orderItems);
-    if (shippingDocs.length) await Shipping.insertMany(shippingDocs);
+ 
 
     const providerSession = await kashierService.createPaymentSession({
       amount: totals.totalAmount,
@@ -572,12 +586,32 @@ const createOrder = async (userId, payload = {}, sessionId) => {
     await payment[0].save();
     await createdOrder.save();
 
-    await cart.clear();
 
     draftOrderId = null;
 
     return {
-      order: await getOrderById(createdOrder._id),
+      // Minimal order snapshot; status is "notpayed" and this order is hidden
+      // from all public order-listing endpoints until payment succeeds.
+      order: {
+        id: createdOrder._id,
+        userId,
+        subtotal: totals.subtotal,
+        discountAmount: totals.discountAmount,
+        shippingFee: totals.shippingFee,
+        promoCode: totals.promoCode || null,
+        totalAmount: totals.totalAmount,
+        orderDate: createdOrder.orderDate,
+        status: createdOrder.status,
+        items: orderItems,
+        vendors: toVendorSummary(orderItems).map((v) => ({
+          vendorId: v.vendorId,
+          vendorName: 'Unknown Vendor',
+          totalAmount: v.total,
+          totalQuantity: v.quantity,
+          items: v.items,
+        })),
+        payment: null,
+      },
       paymentSession: {
         sessionId: providerSession._id,
         orderId: providerSession?.paymentParams?.order || `ORDER-${createdOrder._id}`,
@@ -612,6 +646,7 @@ const createCashOrder = async (userId, sessionId) => {
         totalAmount: totals.totalAmount,
         subtotal: totals.subtotal,
         discountAmount: totals.discountAmount,
+        shippingFee: totals.shippingFee,
         promoCode: totals.promoCode,
         orderDate: new Date(),
         status: "pending",
@@ -639,6 +674,7 @@ const createCashOrder = async (userId, sessionId) => {
 
     await createdOrder.save();
 
+    // For cash orders, remove cart items immediately.
     await cart.clear();
 
     draftOrderId = null;
@@ -671,6 +707,7 @@ const checkout = async (userId, sessionId) => {
         totalAmount: totals.totalAmount,
         subtotal: totals.subtotal,
         discountAmount: totals.discountAmount,
+        shippingFee: totals.shippingFee,
         promoCode: totals.promoCode,
         orderDate: new Date(),
         status: "pending",
@@ -811,15 +848,45 @@ const handleWebhook = async (payload, signatureHeader) => {
     : await Payment.findOne({ gatewayPaymentId: data?._id || data?.sessionId });
   if (!payment) throw OrderErrors.PaymentNotFound;
 
-  payment.paymentStatus = data?.status === "SUCCESS" ? "completed" : "failed";
+  const isSuccess = data?.status === "SUCCESS";
+  payment.paymentStatus = isSuccess ? "completed" : "failed";
   payment.transactionId = data?.paymentId || data?.referenceId || payment.transactionId;
   await payment.save();
+
+  const orderId = payment.orderId;
+
+  const orderDoc = await Order.findById(orderId);
+  if (!orderDoc) return { success: true };
+
+  if (!isSuccess) {
+    // Payment failed/canceled:
+    // - keep Payment document (status already set to "failed")
+    // - delete Order document (it should not appear as a real order)
+    // - do NOT create shipping or clear cart.
+    await Shipping.deleteMany({ orderId }).catch(() => {});
+    await Order.findByIdAndDelete(orderId).catch(() => {});
+    return { success: true };
+  }
+
+
+  const existing = await Shipping.findOne({ orderId }).lean().catch(() => null);
+  if (!existing) {
+    const shippingDocs = buildShippingDocsForOrder(orderDoc._id, orderDoc.items || []);
+    if (shippingDocs.length) await Shipping.insertMany(shippingDocs);
+  }
+
+  const shippings = await Shipping.find({ orderId }).lean().catch(() => []);
+  updateOrderStatusByShippings(orderDoc, shippings);
+  await orderDoc.save();
+
+  const cart = await Cart.findOne({ userId: orderDoc.userId });
+  if (cart) await cart.clear().catch(() => {});
 
   return { success: true };
 };
 
 const getTopFiveRecentOrders = async (vendorId, count = 5) => {
-  const orders = await Order.find({ "items.vendorId": vendorId })
+  const orders = await Order.find({ "items.vendorId": vendorId, status: { $ne: "notpayed" } })
     .sort({ orderDate: -1 })
     .limit(Number(count))
     .populate("userId", "name")
@@ -894,6 +961,7 @@ const getCheckoutPreview = async (userId, sessionId) => {
   return {
     subtotal: totals.subtotal,
     discountAmount: totals.discountAmount,
+    shippingFee: totals.shippingFee,
     promoCode: totals.promoCode ?? null,
     totalAmount: totals.totalAmount,
     itemCount: items.reduce((sum, i) => sum + i.quantity, 0),

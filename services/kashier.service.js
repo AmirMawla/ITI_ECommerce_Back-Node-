@@ -21,6 +21,8 @@ const createPaymentSession = async ({ amount, orderId, notes = "Order payment" }
       "Kashier is not configured (set KASHIER_URL, KASHIER_API_KEY, and related env vars)."
     );
   }
+
+  let merchantRedirect = "";
   try {
     const rawRedirect = process.env.FRONTEND_URL || "https://example.com/redirect";
     const rawWebhook = process.env.WEBHOOK_URL ? process.env.WEBHOOK_URL.trim() : "";
@@ -31,32 +33,17 @@ const createPaymentSession = async ({ amount, orderId, notes = "Order payment" }
       return m ? m[1] : null;
     })();
 
-    // If frontend url is like "localhost:4200", normalize it first; then URI-encode.
-    const redirectNormalized = (() => {
-      const s = String(rawRedirect).trim();
-      if (/^https?:\/\//i.test(s)) return s;
-      const host = s.split("/")[0];
-      const useHttp = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
-      return `${useHttp ? "http" : "https"}://${s}`;
+    
+    const merchantRedirectUrl = (() => {
+      if (!webhookBase) throw new Error("WEBHOOK_URL must be set to build merchantRedirect.");
+      const u = new URL(webhookBase);
+      u.protocol = "https:";
+      u.pathname = "/orders/redirect";
+      u.searchParams.set("orderId", String(orderId));
+      return u.toString();
     })();
-    // Kashier seems to validate `merchantRedirect` strictly.
-    // Docs show an explicit path like ".../redirect". Your env is often only base URL.
-    const merchantRedirect = (() => {
-      const base = redirectNormalized.replace(/\/+$/, "");
-      // If Kashier blocks localhost redirects (common), fall back to your public ngrok domain
-      // (we reuse the WEBHOOK_URL base because it is already public).
-      const hostPort = base.match(/^https?:\/\/([^/]+)/i)?.[1] || "";
-      const hostOnly = hostPort.split(":")[0];
-      if (/^(localhost|127\.0\.0\.1)$/i.test(hostOnly) && webhookBase) return `${webhookBase}/redirect`;
 
-      // If there's no path at all (e.g. "http://localhost:3000"), add "/redirect"
-      if (/^https?:\/\/[^/]+$/i.test(base)) return `${base}/redirect`;
-      return redirectNormalized;
-    })();
-    const merchantRedirectEncoded = urlencode(merchantRedirect);
-
-    console.log("Kashier merchantRedirect (raw):", merchantRedirect);
-    console.log("Kashier merchantRedirect (encoded):", merchantRedirectEncoded);
+    merchantRedirect = merchantRedirectUrl;
 
     const response = await httpClient.post("/v3/payment/sessions", {
       paymentType: "credit",
@@ -89,7 +76,7 @@ const createPaymentSession = async ({ amount, orderId, notes = "Order payment" }
       err.response?.statusText ||
       err.message ||
       "Kashier request failed";
-    console.error("Kashier createPaymentSession:", detail, err.response?.status);
+    console.error("Kashier createPaymentSession:", detail, err.response?.status, { merchantRedirect });
     throw new Error(`Payment session failed: ${detail}`);
   }
 };

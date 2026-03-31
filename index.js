@@ -40,9 +40,6 @@ app.use('/admin', adminRoute);
 app.use('/cart', cartRoute);
 app.use('/orders', orderRoutes);
 app.use('/payments', paymentRoutes);
-app.get("/redirect", (req, res) => {
-  res.status(200).send("Payment redirect endpoint is working.");
-});
 app.use('/banners', bannerRoute);
 app.use('/seller', sellerRoute);
 

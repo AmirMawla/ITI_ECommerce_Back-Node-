@@ -95,6 +95,8 @@ router.post(
   orderController.webhook
 );
 
+router.get("/redirect", orderController.redirectAfterPayment);
+
 
 router.get(
   "/:id",

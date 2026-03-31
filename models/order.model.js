@@ -58,6 +58,7 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: {
         values: [
+          "notpayed",
           "pending",
           "proccessing",
           "shipped",

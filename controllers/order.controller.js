@@ -159,6 +159,17 @@ const webhook = async (req, res, next) => {
   }
 };
 
+const redirectAfterPayment = async (req, res, next) => {
+  try {
+    const frontendBase = (process.env.FRONTEND_URL || "").trim();
+    if (!frontendBase) return res.status(500).send("FRONTEND_URL is not configured");
+    const base = frontendBase.replace(/\/+$/, "");
+    return res.redirect(302, `${base}/user-orders`);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getTopFiveRecentVendorOrders = async (req, res, next) => {
   try {
     const currentUser = getCurrentUser(req);
@@ -195,6 +206,7 @@ module.exports = {
   cancelOrder,
   updateOrderStatus,
   webhook,
+  redirectAfterPayment,
   getTopFiveRecentVendorOrders,
   getCheckoutPreview,
 };
