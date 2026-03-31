@@ -415,6 +415,7 @@ const getAllOrders = async (request) => {
     totalAmount: o.totalAmount,
     orderDate: o.orderDate,
     status: o.status,
+    paymentMethod: o.paymentMethod ,
   }));
 
   return paginate(data, page, limit);
