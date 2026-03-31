@@ -170,6 +170,17 @@ const getTopFiveRecentVendorOrders = async (req, res, next) => {
   }
 };
 
+const getCheckoutPreview = async (req, res, next) => {
+  try {
+    const currentUser = getCurrentUser(req);
+    const sessionId = req.headers["x-session-id"];
+    const data = await orderService.getCheckoutPreview(currentUser.userId, sessionId);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getOrder,
   getOrderDetailsDividedForVendors,
@@ -185,4 +196,5 @@ module.exports = {
   updateOrderStatus,
   webhook,
   getTopFiveRecentVendorOrders,
+  getCheckoutPreview,
 };
