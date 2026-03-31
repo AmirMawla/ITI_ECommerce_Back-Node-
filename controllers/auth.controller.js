@@ -1,24 +1,23 @@
-const APIError = require('../Errors/APIError');
 const authService = require('../services/auth.service');
 
-const signup = async (req, res) => {
+const signup = async (req, res, next) => {
     try {
         const { user, token } = await authService.registerUser(req.body);
         res.status(201).json({ user, token });
     } catch (error) {
-        console.log(error)
-        throw new APIError("Invalid credentials", 400);
+        console.log('signup controller error: ', error)
+        next(error);
     }
 };
 
-const login = async (req, res) => {
+const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
         const { user, token } = await authService.loginUser(email, password);
         res.status(200).json({ user, token });
     } catch (error) {
-        console.log(error)
-        throw new APIError("Invalid credentials", 401);
+        console.log('login controller error: ', error)
+        next(error);
     }
 };
 
@@ -45,15 +44,50 @@ const googleCallback = async (req, res, next) => {
     const code = req.query.code;
     try {
         const { user, token } = await authService.googleOAuth(code);
-        console.log("user data form google is : ", user)
-        res.status(200).json({
-            success: true,
-            message: "Google Login Successful",
-            user,
-            token
-        });
+        const frontendUrl = `http://localhost:4200/auth/login-success?token=${token}&user=${JSON.stringify(user)}`;
+        res.redirect(frontendUrl);
+
     } catch (error) {
-        console.log("error oauth is ", error)
+        console.log("error oauth is ", error);
+        res.redirect(`http://localhost:4200/auth/login?error=google_auth_failed`);
+    }
+};
+
+const forgotPassword = async (req, res, next) => {
+    try {
+        const result = await authService.forgotPassword(req.body.email);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const verifyOTP = async (req, res, next) => {
+    try {
+        const { email, otp } = req.body;
+        const result = await authService.verifyOTP(email, otp);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const resetPassword = async (req, res, next) => {
+    try {
+        const { email, newPassword } = req.body;
+        const result = await authService.resetPassword(email, newPassword);
+        res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const changePassword = async (req, res, next) => {
+    try {
+        const { oldPassword, newPassword } = req.body;
+        const result = await authService.changePassword(req.user.id, oldPassword, newPassword);
+        res.status(200).json(result);
+    } catch (error) {
         next(error);
     }
 };
@@ -63,4 +97,8 @@ module.exports = {
     login,
     googleAuth,
     googleCallback,
+    forgotPassword,
+    verifyOTP,
+    resetPassword,
+    changePassword
 }

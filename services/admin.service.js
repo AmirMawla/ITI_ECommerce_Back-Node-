@@ -1,5 +1,6 @@
 const User = require('../models/user.model');
 const APIError = require('../Errors/APIError');
+const emailService = require('../services/email.service');
 
 exports.getAllUsers = async (filter) => {
     return await User.find(filter);
@@ -17,6 +18,9 @@ exports.toggleRestriction = async (id) => {
 
     user.isRestricted = !user.isRestricted;
     await user.save();
+
+    await emailService.sendRestrictionNotification(user, user.isRestricted);
+
     return user;
 };
 
@@ -28,12 +32,18 @@ exports.decideSellerApplication = async (id, decision) => {
     const user = await User.findById(id);
     if (!user) throw new APIError("User not found", 404);
 
-    if (decision === 'approve') {
+    const isApproved = decision === 'approve';
+
+    if (isApproved) {
         user.role = 'seller';
         user.sellerProfile.isApproved = true;
     } else {
         user.sellerProfile = undefined; // Reject/Clear application
     }
+
     await user.save();
+
+    await emailService.sendSellerDecisionEmail(user, isApproved);
+
     return user;
 };
