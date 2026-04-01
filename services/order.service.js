@@ -425,7 +425,7 @@ const getVendorOrders = async (requestedVendorId, currentUser, request) => {
   const filter = { "items.vendorId": new mongoose.Types.ObjectId(vendorId) };
   await applyCommonFilters(filter, request);
 
-  const orders = await Order.find(filter).sort(sort).lean();
+  const orders = await Order.find(filter).sort(sort).populate("userId", "name").lean();
 
   const orderIds = orders.map((o) => o._id);
   const shippings = orderIds.length
@@ -439,6 +439,7 @@ const getVendorOrders = async (requestedVendorId, currentUser, request) => {
     const vendorSubtotal = vendorItems.reduce((a, b) => a + Number(b.priceAtOrder) * Number(b.quantity), 0);
     return {
       id: o._id,
+      userName: o.userId?.name,
       vendorSubtotal,
       subtotal: o.subtotal ?? null,
       discountAmount: o.discountAmount ?? 0,
