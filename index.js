@@ -13,6 +13,8 @@ const { limiter } = require("./middlewares/rateLimiter");
 const authRoute = require("./routes/auth.routes")
 const usersRoute = require("./routes/user.routes")
 const adminRoute = require("./routes/admin.routes")
+const favouritesRoute = require("./routes/favorite.routes")
+const reviewsRoute = require("./routes/review.routes")
 const cartRoute = require("./routes/cart.routes")
 const orderRoutes = require("./routes/order.routes");
 const paymentRoutes = require("./routes/payment.routes");
@@ -40,6 +42,8 @@ app.use(limiter);
 app.use('/auth', authRoute);
 app.use('/users', usersRoute);
 app.use('/admin', adminRoute);
+app.use('/favourites', favouritesRoute);
+app.use('/reviews', reviewsRoute);
 app.use('/cart', cartRoute);
 app.use('/orders', orderRoutes);
 app.use('/payments', paymentRoutes);
