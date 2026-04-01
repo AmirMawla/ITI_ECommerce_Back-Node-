@@ -7,6 +7,7 @@ const restrictTo = require('../middlewares/restrictTo');
 const bannerController = require('../controllers/banner.controller');
 const bannerSchemas = require('../schemas/banners');
 const validate = require('../middlewares/validate');
+const analyticsRoutes = require("./analytics.routes");
 
 
 router.use(Authentication);
@@ -42,6 +43,9 @@ router.post('/banners', validate(bannerSchemas.createBannerSchema), bannerContro
 router.patch('/banners/:id', validate(bannerSchemas.updateBannerSchema), bannerController.updateBanner);
 router.delete('/banners/:id', validate(bannerSchemas.getBannerSchema), bannerController.deleteBanner);
 router.patch('/banners/:id/toggle', validate(bannerSchemas.getBannerSchema), bannerController.toggleBanner);
+
+
+router.use("/", analyticsRoutes);
 
 module.exports = router;
 

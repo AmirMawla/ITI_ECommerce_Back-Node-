@@ -5,7 +5,7 @@ exports.getCart = async (req, res, next) => {
     try {
         const userId = req.user ? req.user.id : null;
         const sessionId =req.headers['x-session-id'];
-        const { cart, message } = await cartService.getCart(userId, sessionId);
+        const { cart, message } = await cartService.getCartPopulated(userId, sessionId);
         res.status(200).json({ success: true, message, cart });
     }
     catch (err) 
