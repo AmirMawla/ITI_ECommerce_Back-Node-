@@ -5,6 +5,7 @@ const { Authentication } = require('../middlewares/Authentication');
 const restrictTo = require('../middlewares/restrictTo');
 const validate = require('../middlewares/validate');
 const sellerSchemas = require('../schemas/seller');
+const vendorAnalyticsRoutes = require("./vendorAnalytics.routes");
 
 router.use(Authentication);
 router.use(restrictTo(['seller']));
@@ -21,5 +22,7 @@ router.get('/products/:id', validate(sellerSchemas.productIdSchema), sellerContr
 router.post('/products', validate(sellerSchemas.createProductSchema), sellerController.createProduct);
 router.patch('/products/:id', validate(sellerSchemas.productIdSchema), validate(sellerSchemas.updateProductSchema), sellerController.updateProduct);
 router.delete('/products/:id', validate(sellerSchemas.productIdSchema), sellerController.deleteProduct);
+
+router.use("/", vendorAnalyticsRoutes);
 
 module.exports = router;
