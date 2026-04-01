@@ -17,6 +17,6 @@ router.get('/is-item-in-cart/:productId',restrictTo(['customer']), validate(sche
 //router.post('/merge-guest-cart',restrictTo(['customer']) , cartController.mergeGuestCart);
 router.get('/reciept',restrictTo(['customer']), cartController.calculateOrderSummary);
 router.post('/checkout',restrictTo(['customer']), cartController.checkout);
-
+router.post('/promocode',restrictTo(['customer']) ,cartController.applyPromoCode);
 
 module.exports = router;

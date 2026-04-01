@@ -96,6 +96,17 @@ exports.calculateOrderSummary = async (req, res, next) => {
     }
 }
 
+exports.applyPromoCode = async(req, res, next) => {
+    try{
+        const userId = req.user ? req.user.id : null;
+        const sessionId = req.headers['x-session-id'];
+        const{promoCode} = req.body;
+        const {cart, success, message} = await cartService.applyPromoCode(userId, sessionId, promoCode);
+        res.status(200).json({ success, cart, message });
+    }catch(err) {
+        next(err);
+    }
+}
 exports.checkout = async (req, res, next) => {
     try{
         const userId = req.user ? req.user.id : null;   
