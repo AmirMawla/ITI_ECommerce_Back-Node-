@@ -129,6 +129,27 @@ exports.calculateOrderSummary = async(userId,sessionId,)=>{
     return {discount, finalTotal, itemCount}
 }
 
+exports.applyPromoCode = async(userId,sessionId,promoCode)=>{
+    const {cart} =await this.getCart(userId,sessionId)
+    PromoCodes = ["shopiq1","shopiq2","shopiq3"]
+    if(!PromoCodes.includes(promoCode)) throw new APIError("Invalid promo code",400)
+    if(promoCode === "shopiq1"){
+        cart.promoCode = promoCode
+        cart.discountAmount = .1*cart.subtotal
+    }
+    if(promoCode === "shopiq2"){
+        cart.promoCode = promoCode
+        cart.discountAmount = .2*cart.subtotal
+    }
+    if(promoCode === "shopiq3"){
+        cart.promoCode = promoCode
+        cart.discountAmount = .3*cart.subtotal
+    }
+    await cart.save()
+    const finalTotal = cart.total
+    const discount = cart.discountAmount
+    return {discount, finalTotal, message:"Promo code applied successfully"}
+}
 
 exports.checkout = async(userId,sessionId)=>{
     const {cart} =await this.getCart(userId,sessionId)
