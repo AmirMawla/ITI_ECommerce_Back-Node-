@@ -101,8 +101,8 @@ exports.applyPromoCode = async(req, res, next) => {
         const userId = req.user ? req.user.id : null;
         const sessionId = req.headers['x-session-id'];
         const{promoCode} = req.body;
-        const {discount, finalTotal, message} = await cartService.applyPromoCode(userId, sessionId, promoCode);
-        res.status(200).json({ success: true, discount, finalTotal, message });
+        const {cart, success, message} = await cartService.applyPromoCode(userId, sessionId, promoCode);
+        res.status(200).json({ success, cart, message });
     }catch(err) {
         next(err);
     }

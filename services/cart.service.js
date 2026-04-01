@@ -133,22 +133,20 @@ exports.applyPromoCode = async(userId,sessionId,promoCode)=>{
     const {cart} =await this.getCart(userId,sessionId)
     PromoCodes = ["shopiq1","shopiq2","shopiq3"]
     if(!PromoCodes.includes(promoCode)) throw new APIError("Invalid promo code",400)
-    if(promoCode === "shopiq1"){
+    if(promoCode === PromoCodes[0]){
         cart.promoCode = promoCode
-        cart.discountAmount = .1*cart.subtotal
+        cart.discountAmount = 30
     }
-    if(promoCode === "shopiq2"){
+    if(promoCode === PromoCodes[1]){
         cart.promoCode = promoCode
-        cart.discountAmount = .2*cart.subtotal
+        cart.discountAmount = 50
     }
-    if(promoCode === "shopiq3"){
+    if(promoCode === PromoCodes[2]){
         cart.promoCode = promoCode
-        cart.discountAmount = .3*cart.subtotal
+        cart.discountAmount = 60
     }
     await cart.save()
-    const finalTotal = cart.total
-    const discount = cart.discountAmount
-    return {discount, finalTotal, message:"Promo code applied successfully"}
+    return {cart, success:true, message:"Promo code applied successfully"}
 }
 
 exports.checkout = async(userId,sessionId)=>{
@@ -164,8 +162,6 @@ exports.checkout = async(userId,sessionId)=>{
             await product.save()
         }
     }
-    // Here you would integrate with a payment gateway and create an order record
-    // For simplicity, we'll just return the reciept and clear the cart
     await cart.clear()
     return {message:"Checkout initiated", reciept}
     
