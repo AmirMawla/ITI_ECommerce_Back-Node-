@@ -5,7 +5,7 @@ const APIError = require('../Errors/APIError');
 
 exports.getCart = async(userId,sessionId)=>{
     const query = userId ? { userId } : { sessionId, userId: null }
-    let cart = await Cart.findOne(query)
+    let cart = await Cart.findOne(query)//last edit
     let message = "Cart retrived successfully"
     if(!cart){
         cart = await Cart.create({userId,sessionId})
@@ -14,6 +14,14 @@ exports.getCart = async(userId,sessionId)=>{
     return {cart ,message}
 }
 
+exports.getCartPopulated = async(userId, sessionId) => {
+    const query = userId ? { userId } : { sessionId, userId: null }
+    let cart = await Cart.findOne(query).populate('items.productId', 'name price images imageUrl')
+    if(!cart){
+        cart = await Cart.create({userId, sessionId})
+    }
+    return {cart ,message:"Cart retrived successfully"}
+}
 
 exports.addItemToCart = async(userId,sessionId,productId,quantity)=>{
     const {cart} =await this.getCart(userId,sessionId)
@@ -24,7 +32,7 @@ exports.addItemToCart = async(userId,sessionId,productId,quantity)=>{
 
     await cart.addItem(productId,quantity,product.price)
 
-    return {cart, message:"Item added to cart"}
+    return {cart, message:"Item added to cart",success:true}
 }
 
 
@@ -48,8 +56,10 @@ exports.updateCartItemQuantity = async(userId,sessionId,productId,quantity)=>{
     const product = await Product.findById(productId)
     if(!product) throw new APIError("Product not found",404)
 
-    cart.updateQuantity(productId,quantity)
-    return {cart, message:"Cart item quantity updated"}
+    await cart.updateQuantity(productId,quantity)
+
+    const populatedCart = await Cart.findById(cart._id).populate('items.productId', 'name price images imageUrl')
+    return {cart:populatedCart, message:"Cart item quantity updated",success:true}
 }
 
 
@@ -59,8 +69,10 @@ exports.removeItemFromCart = async(userId,sessionId,productId)=>{
     const product = await Product.findById(productId)
     if(!product) throw new APIError("Product not found",404)
 
-    cart.removeItem(productId)
-    return {cart, message:"Item removed from cart"}
+    await cart.removeItem(productId)
+
+    const populatedCart = await Cart.findById(cart._id).populate('items.productId', 'name price images imageUrl')
+    return {cart:populatedCart, message:"Item removed from cart",success:true}
 }
 
 
