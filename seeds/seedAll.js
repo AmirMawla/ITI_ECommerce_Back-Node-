@@ -8,6 +8,7 @@
  * Optional .env: SEED_USER_PASSWORD (default ShopiqDemo123), SEED_ADMIN_* for admin account.
  */
 require('dotenv').config();
+const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 
 const User = require('../models/user.model');
@@ -78,11 +79,13 @@ async function run() {
     }
 
     console.log('📦 Seeding users...');
+    const hashedAdminPassword = await bcrypt.hash(adminPassword, 10);
+    const hashedDemoPassword = await bcrypt.hash(demoPassword, 10);
     const users = await User.create([
       {
         name: adminName,
         email: adminEmail,
-        password: adminPassword,
+        password: hashedAdminPassword,
         role: 'admin',
         phone: '+20 100 000 0001',
         birthdate: new Date('1990-05-15'),
@@ -99,7 +102,7 @@ async function run() {
       {
         name: 'Nour El-Din Mahmoud',
         email: 'nour.tech@shopiq.demo',
-        password: demoPassword,
+        password: hashedDemoPassword,
         role: 'seller',
         phone: '+20 128 334 5520',
         birthdate: new Date('1988-03-22'),
@@ -122,7 +125,7 @@ async function run() {
       {
         name: 'Omar Hassan Khaled',
         email: 'omar.style@shopiq.demo',
-        password: demoPassword,
+        password: hashedDemoPassword,
         role: 'seller',
         phone: '+20 100 887 4412',
         birthdate: new Date('1992-11-08'),
@@ -145,7 +148,7 @@ async function run() {
       {
         name: 'Sara Ahmed Fathy',
         email: 'sara.ahmed@shopiq.demo',
-        password: demoPassword,
+        password: hashedDemoPassword,
         role: 'customer',
         phone: '+20 111 223 4455',
         birthdate: new Date('1996-07-12'),
@@ -162,7 +165,7 @@ async function run() {
       {
         name: 'Mahmoud Ali Ibrahim',
         email: 'mahmoud.ali@shopiq.demo',
-        password: demoPassword,
+        password: hashedDemoPassword,
         role: 'customer',
         phone: '+20 122 998 7766',
         birthdate: new Date('1994-01-30'),
@@ -179,7 +182,7 @@ async function run() {
       {
         name: 'Layla Ibrahim Mostafa',
         email: 'layla.ibrahim@shopiq.demo',
-        password: demoPassword,
+        password: hashedDemoPassword,
         role: 'customer',
         phone: '+20 106 554 3322',
         birthdate: new Date('1999-09-03'),
