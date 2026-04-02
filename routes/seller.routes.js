@@ -5,6 +5,7 @@ const { Authentication } = require('../middlewares/Authentication');
 const restrictTo = require('../middlewares/restrictTo');
 const validate = require('../middlewares/validate');
 const sellerSchemas = require('../schemas/seller');
+const { uploadSingleProductImage  } = require('../middlewares/upload');
 
 router.use(Authentication);
 router.use(restrictTo(['seller']));
@@ -18,6 +19,10 @@ router.patch('/close-store', sellerController.closeStore);
 router.get('/products', sellerController.getMyProducts);
 router.get('/products/low-stock', sellerController.getLowStockProducts);
 router.get('/products/:id', validate(sellerSchemas.productIdSchema), sellerController.getMyProductById);
+router.post('/products/upload-image', (req, res, next) => {
+    console.log('Upload route hit!');
+    next();
+}, uploadSingleProductImage, sellerController.uploadProductImage);
 router.post('/products', validate(sellerSchemas.createProductSchema), sellerController.createProduct);
 router.patch('/products/:id', validate(sellerSchemas.productIdSchema), validate(sellerSchemas.updateProductSchema), sellerController.updateProduct);
 router.delete('/products/:id', validate(sellerSchemas.productIdSchema), sellerController.deleteProduct);

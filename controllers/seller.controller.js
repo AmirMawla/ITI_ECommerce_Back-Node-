@@ -1,4 +1,6 @@
 const sellerService = require('../services/seller.service');
+const imageKitService = require('../services/imageKit.service');
+const APIError = require('../Errors/APIError');
 
 //Profile
 exports.getProfile = async (req, res, next) => {
@@ -37,6 +39,31 @@ exports.getMyProductById = async (req, res, next) => {
     } catch (err) { next(err); }
 };
 
+exports.uploadProductImage = async (req, res, next) => {
+    try {
+        console.log('File received:', req.file);
+        if (!req.file) {
+            return next(new APIError('No file provided', 400));
+        }
+        console.log('Uploading to ImageKit...');
+        const result = await imageKitService.uploadImage(
+            req.file.buffer,
+            req.file.originalname,
+            'products'
+        );
+        console.log('Upload result:', result);
+        res.status(200).json({
+            success: true,
+            data: {
+                url: result.url,
+                fileId: result.fileId
+            }
+        });
+    } catch (err) {
+        console.log('Upload error:', err);
+        next(err);
+    }
+};
 exports.createProduct = async (req, res, next) => {
     try {
         const product = await sellerService.createProduct(req.user.id, req.body);
