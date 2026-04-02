@@ -5,6 +5,7 @@ const Payment = require("../models/payment.model");
 const Shipping = require("../models/shipping.model");
 const Review = require("../models/review.model");
 const Cart = require("../models/cart.model");
+const Product = require("../models/product.model");
 const APIError = require("../Errors/APIError");
 const OrderErrors = require("../Errors/OrderErrors");
 const cartService = require("./cart.service");
@@ -15,7 +16,6 @@ const safeEnqueueOrderEmail = async (emailPayload) => {
   try {
     await sendOrderStatusChangedEmail(emailPayload);
   } catch (err) {
-    // Do not block the API response if email queue fails
     console.error("Failed to enqueue order status email:", err?.message || err);
   }
 };
@@ -161,11 +161,54 @@ const buildOrderItemsFromCart = (cart) => {
   return items;
 };
 
+const summarizeProductQuantities = (orderItems = []) => {
+  const qtyByProduct = new Map();
+  for (const line of orderItems || []) {
+    const pid = line?.productId ? String(line.productId) : null;
+    const qty = Number(line?.quantity);
+    if (!pid || !Number.isFinite(qty) || qty <= 0) continue;
+    qtyByProduct.set(pid, (qtyByProduct.get(pid) || 0) + qty);
+  }
+  return Array.from(qtyByProduct.entries()).map(([productId, quantity]) => ({
+    productId,
+    quantity,
+  }));
+};
+
+const reserveStockForOrderItems = async (orderItems = []) => {
+  const lines = summarizeProductQuantities(orderItems);
+  const reserved = [];
+  for (const line of lines) {
+    const updated = await Product.findOneAndUpdate(
+      { _id: line.productId, stock: { $gte: line.quantity } },
+      { $inc: { stock: -line.quantity } },
+      { new: true }
+    );
+    if (!updated) {
+      await releaseReservedStock(reserved).catch(() => {});
+      throw new APIError(`Insufficient stock for product ${line.productId}`, 400);
+    }
+    reserved.push(line);
+  }
+  return reserved;
+};
+
+const releaseReservedStock = async (reservedLines = []) => {
+  const lines = summarizeProductQuantities(reservedLines);
+  if (!lines.length) return;
+  const bulkOps = lines.map((l) => ({
+    updateOne: {
+      filter: { _id: l.productId },
+      update: { $inc: { stock: l.quantity } },
+    },
+  }));
+  await Product.bulkWrite(bulkOps, { ordered: false });
+};
+
 const applyCommonFilters = async (baseFilter, request = {}) => {
   const statuses = normalizeStatuses(request.statuses);
 
   if (statuses?.length) {
-    // Always exclude "notpayed" from filtered results
     const filteredStatuses = statuses.filter((s) => s !== "notpayed");
     if (filteredStatuses.length) {
       baseFilter.status = { $in: filteredStatuses };
@@ -173,7 +216,6 @@ const applyCommonFilters = async (baseFilter, request = {}) => {
       baseFilter.status = { $ne: "notpayed" };
     }
   } else {
-    // Default: exclude "notpayed" everywhere
     baseFilter.status = { $ne: "notpayed" };
   }
 
@@ -535,6 +577,7 @@ const createOrder = async (userId, payload = {}, sessionId) => {
     await cartService.mergeGuestCart(userId, sessionId);
   }
   let draftOrderId = null;
+  let reservedStock = null;
   try {
     const [cart, user] = await Promise.all([
       Cart.findOne({ userId }).populate("items.productId"),
@@ -544,6 +587,8 @@ const createOrder = async (userId, payload = {}, sessionId) => {
 
     const orderItems = buildOrderItemsFromCart(cart);
     const totals = computeTotalsFromCart(cart, orderItems);
+
+    reservedStock = await reserveStockForOrderItems(orderItems);
 
     const order = await Order.create([
       {
@@ -592,8 +637,6 @@ const createOrder = async (userId, payload = {}, sessionId) => {
     draftOrderId = null;
 
     return {
-      // Minimal order snapshot; status is "notpayed" and this order is hidden
-      // from all public order-listing endpoints until payment succeeds.
       order: {
         id: createdOrder._id,
         userId,
@@ -622,6 +665,7 @@ const createOrder = async (userId, payload = {}, sessionId) => {
       },
     };
   } catch (error) {
+    await releaseReservedStock(reservedStock).catch(() => {});
     await rollbackDraftOrder(draftOrderId);
     throw mapTransactionError(error, "createOrder");
   }
@@ -632,6 +676,7 @@ const createCashOrder = async (userId, sessionId) => {
     await cartService.mergeGuestCart(userId, sessionId);
   }
   let draftOrderId = null;
+  let reservedStock = null;
   try {
     const [cart, user] = await Promise.all([
       Cart.findOne({ userId }).populate("items.productId"),
@@ -641,6 +686,8 @@ const createCashOrder = async (userId, sessionId) => {
 
     const orderItems = buildOrderItemsFromCart(cart);
     const totals = computeTotalsFromCart(cart, orderItems);
+
+    reservedStock = await reserveStockForOrderItems(orderItems);
 
     const order = await Order.create([
       {
@@ -683,6 +730,7 @@ const createCashOrder = async (userId, sessionId) => {
 
     return getOrderById(createdOrder._id);
   } catch (error) {
+    await releaseReservedStock(reservedStock).catch(() => {});
     await rollbackDraftOrder(draftOrderId);
     throw mapTransactionError(error, "createCashOrder");
   }
@@ -693,6 +741,7 @@ const checkout = async (userId, sessionId) => {
     await cartService.mergeGuestCart(userId, sessionId);
   }
   let draftOrderId = null;
+  let reservedStock = null;
   try {
     const [cart, user] = await Promise.all([
       Cart.findOne({ userId }).populate("items.productId"),
@@ -702,6 +751,8 @@ const checkout = async (userId, sessionId) => {
 
     const orderItems = buildOrderItemsFromCart(cart);
     const totals = computeTotalsFromCart(cart, orderItems);
+
+    reservedStock = await reserveStockForOrderItems(orderItems);
 
     const order = await Order.create([
       {
@@ -740,25 +791,37 @@ const checkout = async (userId, sessionId) => {
 
     return getOrderById(createdOrder._id);
   } catch (error) {
+    await releaseReservedStock(reservedStock).catch(() => {});
     await rollbackDraftOrder(draftOrderId);
     throw mapTransactionError(error, "checkout");
   }
 };
 
 const cancelOrder = async (orderId, currentUserId, isAdmin) => {
-  const order = await Order.findById(orderId);
-  if (!order) throw OrderErrors.OrderNotFound;
+  const baseFilter = { _id: orderId };
+  if (!isAdmin) baseFilter.userId = currentUserId;
 
-  if (!isAdmin && String(order.userId) !== String(currentUserId)) throw OrderErrors.AccessDenied;
-  if (order.status === "delivered") throw OrderErrors.OrderAlreadyDelivered;
-  if (order.status === "canceled") throw OrderErrors.OrderAlreadyCancelled;
 
-  order.status = "canceled";
-  await order.save();
+  const order = await Order.findOneAndUpdate(
+    { ...baseFilter, status: { $nin: ["delivered", "canceled"] } },
+    { $set: { status: "canceled" } },
+    { new: false }
+  );
+
+  if (!order) {
+    const exists = await Order.findById(orderId).select("_id userId status").lean();
+    if (!exists) throw OrderErrors.OrderNotFound;
+    if (!isAdmin && String(exists.userId) !== String(currentUserId)) throw OrderErrors.AccessDenied;
+    if (exists.status === "delivered") throw OrderErrors.OrderAlreadyDelivered;
+    if (exists.status === "canceled") throw OrderErrors.OrderAlreadyCancelled;
+    throw new APIError("Cannot cancel order in its current state.", 400);
+  }
+
+  await releaseReservedStock(order.items).catch(() => {});
 
   await Shipping.updateMany({ orderId: order._id }, { $set: { status: "canceled" } });
 
-  const payment = await Payment.findById(order.paymentId);
+  const payment = order.paymentId ? await Payment.findById(order.paymentId) : null;
   if (payment) {
     payment.paymentStatus = payment.paymentStatus === "completed" ? "refunded" : "cancelled";
     await payment.save();
@@ -861,10 +924,7 @@ const handleWebhook = async (payload, signatureHeader) => {
   if (!orderDoc) return { success: true };
 
   if (!isSuccess) {
-    // Payment failed/canceled:
-    // - keep Payment document (status already set to "failed")
-    // - delete Order document (it should not appear as a real order)
-    // - do NOT create shipping or clear cart.
+    await releaseReservedStock(orderDoc.items).catch(() => {});
     await Shipping.deleteMany({ orderId }).catch(() => {});
     await Order.findByIdAndDelete(orderId).catch(() => {});
     return { success: true };
