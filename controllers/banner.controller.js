@@ -1,4 +1,6 @@
+const APIError = require('../Errors/APIError');
 const bannerService = require('../services/banner.service');
+const imageKitService = require('../services/imageKit.service');
 
 exports.getAllBanners = async (req, res, next) => {
     try {
@@ -47,4 +49,28 @@ exports.toggleBanner = async (req, res, next) => {
         const banner = await bannerService.toggleBanner(req.params.id);
         res.status(200).json({ success: true, data: banner });
     } catch (err) { next(err); }
+};
+
+exports.uploadBannerImage = async (req, res, next) => {
+    try {
+        if (!req.file) {
+            return next(new APIError('No file provided', 400));
+        }
+
+        const result = await imageKitService.uploadImage(
+            req.file.buffer,
+            req.file.originalname,
+            'banners'
+        );
+
+        res.status(200).json({
+            success: true,
+            data: {
+                url: result.url,
+                fileId: result.fileId
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
 };

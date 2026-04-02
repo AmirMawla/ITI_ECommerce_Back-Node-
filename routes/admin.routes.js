@@ -8,7 +8,7 @@ const bannerController = require('../controllers/banner.controller');
 const bannerSchemas = require('../schemas/banners');
 const validate = require('../middlewares/validate');
 const analyticsRoutes = require("./analytics.routes");
-
+const { uploadBannerImage } = require('../middlewares/upload');
 
 router.use(Authentication);
 router.use(restrictTo(['admin']));
@@ -39,6 +39,7 @@ router.delete('/categories/:id', adminProductController.deleteCategory);
 //banners
 router.get('/banners', bannerController.getAllBanners);
 router.get('/banners/:id', validate(bannerSchemas.getBannerSchema), bannerController.getBanner);
+router.post('/banners/upload-image', uploadBannerImage, bannerController.uploadBannerImage);
 router.post('/banners', validate(bannerSchemas.createBannerSchema), bannerController.createBanner);
 router.patch('/banners/:id', validate(bannerSchemas.updateBannerSchema), bannerController.updateBanner);
 router.delete('/banners/:id', validate(bannerSchemas.getBannerSchema), bannerController.deleteBanner);
